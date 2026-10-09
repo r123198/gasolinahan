@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/dashboard_viewmodel.dart';
+import 'viewmodels/fill_up_viewmodel.dart';
 import 'viewmodels/report_viewmodel.dart';
+import 'viewmodels/trip_viewmodel.dart';
 import 'views/splash_view.dart';
 import 'views/sign_in_view.dart';
 import 'views/sign_up_view.dart';
@@ -35,6 +37,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthViewModel()),
         ChangeNotifierProvider(create: (_) => DashboardViewModel()),
         ChangeNotifierProvider(create: (_) => ReportViewModel()),
+        ChangeNotifierProvider(create: (_) => FillUpViewModel()..load()),
+        ChangeNotifierProvider(create: (_) => TripViewModel()),
       ],
       child: MaterialApp(
         title: 'Gasolinahan',

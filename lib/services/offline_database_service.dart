@@ -15,9 +15,27 @@ class OfflineDatabaseService {
     final path = p.join(dbPath, 'gasolinahan.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 4,
+      onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
-        await db.execute('''
+        await _createPendingReports(db);
+        await _createFillUps(db);
+        await _createTrips(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) await _createFillUps(db);
+        if (oldVersion < 3) await _createTrips(db);
+        if (oldVersion == 3) {
+          await db.execute(
+            'ALTER TABLE trips ADD COLUMN isActive INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+      },
+    );
+  }
+
+  static Future<void> _createPendingReports(Database db) {
+    return db.execute('''
           CREATE TABLE pending_reports (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             userId TEXT NOT NULL,
@@ -34,8 +52,45 @@ class OfflineDatabaseService {
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
-      },
-    );
+  }
+
+  static Future<void> _createTrips(Database db) async {
+    await db.execute('''
+          CREATE TABLE trips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            startedAt TEXT NOT NULL,
+            endedAt TEXT NOT NULL,
+            distanceMeters REAL NOT NULL,
+            isActive INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+    await db.execute('''
+          CREATE TABLE trip_points (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tripId INTEGER NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY (tripId) REFERENCES trips (id) ON DELETE CASCADE
+          )
+        ''');
+    await db.execute('CREATE INDEX idx_trip_points_trip ON trip_points (tripId)');
+  }
+
+  static Future<void> _createFillUps(Database db) {
+    return db.execute('''
+          CREATE TABLE fill_ups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stationId TEXT NOT NULL,
+            stationName TEXT NOT NULL,
+            brand TEXT NOT NULL,
+            fuelType TEXT NOT NULL,
+            amountSpent REAL NOT NULL,
+            liters REAL,
+            odometerKm REAL NOT NULL,
+            timestamp TEXT NOT NULL
+          )
+        ''');
   }
 
   Future<int> insertPendingReport(Map<String, dynamic> report) async {

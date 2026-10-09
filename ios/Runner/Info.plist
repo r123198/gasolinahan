@@ -60,7 +60,15 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Gasolinahan needs your location to show nearby gas stations and fuel prices.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Gasolinahan needs your location to show nearby gas stations and fuel prices.</string>
+	<string>Gasolinahan records your drives in the background so it can track kilometers and gas spending without you having to remember.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Gasolinahan records your drives in the background so it can track kilometers and gas spending without you having to remember.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Gasolinahan uses motion data to notice when you start driving so your trips are tracked automatically.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

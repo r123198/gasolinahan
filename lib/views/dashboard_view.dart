@@ -10,6 +10,9 @@ import 'package:provider/provider.dart';
 import '../models/brand_registry.dart';
 import '../models/station_model.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
+import '../viewmodels/trip_viewmodel.dart';
+import '../components/track_me_button.dart';
+import '../components/detour_card.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_platform.dart';
 import '../ui/adaptive/app_sheet.dart';
@@ -59,6 +62,7 @@ class _DashboardViewState extends State<DashboardView> {
     _searchController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DashboardViewModel>().listenToStations();
+      context.read<TripViewModel>().startMonitoring();
       _initLocation();
     });
   }
@@ -283,7 +287,13 @@ class _DashboardViewState extends State<DashboardView> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              if (_userLat != null && _userLng != null)
+                DetourCard(
+                  station: station,
+                  userLat: _userLat!,
+                  userLng: _userLng!,
+                ),
               // Actions
               AppPrimaryButton(
                 label: 'Update Prices',
@@ -460,6 +470,11 @@ class _DashboardViewState extends State<DashboardView> {
                 ),
                 const SizedBox(height: 12),
                 _FuelChips(onMapTap: () {}),
+                const SizedBox(height: 12),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: TrackMeButton(),
+                ),
               ],
             ),
           ),
@@ -626,13 +641,16 @@ class _DashboardViewState extends State<DashboardView> {
             ),
           ),
           children: [
-            // Clean, minimal map tiles (Carto Positron — Airbnb-style)
+            // Official OpenStreetMap tiles: free, no API key.
             TileLayer(
-              urlTemplate:
-                  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-              subdomains: const ['a', 'b', 'c', 'd'],
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.gasolinahan.app',
-              retinaMode: true,
+            ),
+            const RichAttributionWidget(
+              alignment: AttributionAlignment.bottomLeft,
+              attributions: [
+                TextSourceAttribution('© OpenStreetMap contributors'),
+              ],
             ),
             CurrentLocationLayer(
               style: LocationMarkerStyle(
@@ -645,6 +663,21 @@ class _DashboardViewState extends State<DashboardView> {
                     const Color(0xFF2563EB).withValues(alpha: 0.08),
                 headingSectorColor:
                     const Color(0xFF2563EB).withValues(alpha: 0.30),
+              ),
+            ),
+            Consumer<TripViewModel>(
+              builder: (context, trips, _) => PolylineLayer(
+                polylines: [
+                  if (trips.livePoints.length > 1)
+                    Polyline(
+                      points: [
+                        for (final p in trips.livePoints)
+                          LatLng(p.latitude, p.longitude),
+                      ],
+                      strokeWidth: 5,
+                      color: const Color(0xFFDC2626),
+                    ),
+                ],
               ),
             ),
             MarkerLayer(markers: markers),
