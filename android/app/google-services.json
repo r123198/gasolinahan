@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "942344185423",
+    "project_id": "gasolinahan-e0917",
+    "storage_bucket": "gasolinahan-e0917.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:942344185423:android:8b178aea084d60c575ec3a",
+        "android_client_info": {
+          "package_name": "com.example.gasolinahan"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdFK8QQ8PoiYLpqjVKKbyVHi-833NkdvU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
