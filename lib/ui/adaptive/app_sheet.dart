@@ -8,18 +8,22 @@ const _sheetMaxHeightFactor = 0.9;
 
 /// Modal bottom sheet. Android uses [showModalBottomSheet]; iOS presents the
 /// same content with [showCupertinoModalPopup] on a rounded surface that
-/// follows the keyboard.
+/// follows the keyboard. [enableDrag] only applies on Android.
 Future<T?> showAppSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool isScrollControlled = false,
   Color? backgroundColor,
+  bool enableDrag = true,
 }) {
   if (!isCupertino(context)) {
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: isScrollControlled,
       backgroundColor: backgroundColor,
+      // Swipe-to-dismiss ignores PopScope, so forms with unsaved input
+      // turn it off and rely on Back/barrier taps, which do respect it.
+      enableDrag: enableDrag,
       builder: builder,
     );
   }

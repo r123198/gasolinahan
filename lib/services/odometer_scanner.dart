@@ -16,8 +16,9 @@ class OdometerScanner {
   final ImagePicker _picker = ImagePicker();
 
   Future<OdometerScanResult> scan() async {
-    final TextRecognizer recognizer =
-        TextRecognizer(script: TextRecognitionScript.latin);
+    final TextRecognizer recognizer = TextRecognizer(
+      script: TextRecognitionScript.latin,
+    );
     try {
       final photo = await _picker.pickImage(
         source: ImageSource.camera,
@@ -26,8 +27,9 @@ class OdometerScanner {
       if (photo == null) {
         return const OdometerScanResult(OdometerScanStatus.cancelled);
       }
-      final text =
-          await recognizer.processImage(InputImage.fromFilePath(photo.path));
+      final text = await recognizer.processImage(
+        InputImage.fromFilePath(photo.path),
+      );
       final lines = [
         for (final block in text.blocks)
           for (final line in block.lines) line.text,

@@ -3,26 +3,62 @@ import 'package:provider/provider.dart';
 import '../components/app_empty_state.dart';
 import '../components/app_primary_button.dart';
 import '../components/insights_card.dart';
-import '../components/station_tracker_card.dart';
+import '../components/fill_up_log_card.dart';
+import '../models/fill_up_model.dart';
+import '../models/station_summary.dart';
+import '../ui/adaptive/app_dialog.dart';
+import '../ui/adaptive/app_toast.dart';
 import '../ui/adaptive/app_spinner.dart';
 import '../ui/tracker_format.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import 'fill_up_form_sheet.dart';
 import 'station_history_sheet.dart';
+import '../ui/app_theme.dart';
 
-/// Home tab: the user's gas tracker — one row card per station they have
-/// filled up at, with spend and distance totals.
+/// Tracker tab: spend totals, fuel insights and the fill-up log, newest
+/// first.
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
+
+  Future<void> _onAction(
+    BuildContext context,
+    FillUpViewModel vm,
+    FillUp fillUp,
+    FillUpAction action,
+  ) async {
+    switch (action) {
+      case FillUpAction.edit:
+        await showFillUpForm(context, editing: fillUp);
+      case FillUpAction.delete:
+        final confirmed = await showAppConfirmDialog(
+          context: context,
+          title: 'Delete this fill-up?',
+          message:
+              'It will be removed from your totals, along with its photos.',
+          confirmLabel: 'Delete',
+          isDestructive: true,
+        );
+        if (!confirmed) return;
+        await vm.remove(fillUp);
+        final error = vm.errorMessage;
+        if (error != null && context.mounted) showAppToast(context, error);
+    }
+  }
+
+  void _openStation(BuildContext context, FillUpViewModel vm, FillUp fillUp) {
+    final key = StationSummary.keyOf(fillUp);
+    final summary = vm.summaries.where((s) => s.key == key).firstOrNull;
+    if (summary != null) showStationHistory(context, summary);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<FillUpViewModel>(
       builder: (context, vm, _) {
-        final summaries = vm.summaries;
+        final entries = vm.log.entries;
         return RefreshIndicator(
           onRefresh: vm.load,
-          color: const Color(0xFF111827),
+          color: AppColors.ink,
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
@@ -32,12 +68,12 @@ class HomeView extends StatelessWidget {
                   padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
                   sliver: SliverToBoxAdapter(child: InsightsCard()),
                 ),
-              if (vm.isLoading && summaries.isEmpty)
+              if (vm.isLoading && entries.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: AppSpinner(strokeWidth: 2)),
                 )
-              else if (vm.errorMessage != null && summaries.isEmpty)
+              else if (vm.errorMessage != null && entries.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -50,18 +86,21 @@ class HomeView extends StatelessWidget {
                             vm.errorMessage!,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
-                              color: Color(0xFF64748B),
+                              color: AppColors.textMuted,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(height: 16),
-                          AppPrimaryButton(label: 'Try again', onPressed: vm.load),
+                          AppPrimaryButton(
+                            label: 'Try again',
+                            onPressed: vm.load,
+                          ),
                         ],
                       ),
                     ),
                   ),
                 )
-              else if (summaries.isEmpty)
+              else if (entries.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -79,12 +118,17 @@ class HomeView extends StatelessWidget {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
                   sliver: SliverList.separated(
-                    itemCount: summaries.length,
+                    itemCount: entries.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, i) => StationTrackerCard(
-                      summary: summaries[i],
-                      onTap: () => showStationHistory(context, summaries[i]),
-                    ),
+                    itemBuilder: (context, i) {
+                      final fillUp = entries[i].fillUp;
+                      return FillUpLogCard(
+                        key: ValueKey(fillUp.id),
+                        entry: entries[i],
+                        onAction: (a) => _onAction(context, vm, fillUp, a),
+                        onStationTap: () => _openStation(context, vm, fillUp),
+                      );
+                    },
                   ),
                 ),
             ],
@@ -114,7 +158,7 @@ class _Header extends StatelessWidget {
                   'Gas Tracker',
                   style: TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,
                     color: Color(0xFF111827),
                   ),
@@ -137,7 +181,7 @@ class _Header extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: Color(0xFF64748B),
+              color: AppColors.textMuted,
             ),
           ),
           if (totals.fillUps > 0) ...[
@@ -182,7 +226,7 @@ class _Total extends StatelessWidget {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF94A3B8),
+              color: AppColors.textMuted,
             ),
           ),
           const SizedBox(height: 2),
@@ -192,7 +236,7 @@ class _Total extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 17,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               color: Colors.white,
               letterSpacing: -0.3,
             ),

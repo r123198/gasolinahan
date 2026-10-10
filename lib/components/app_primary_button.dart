@@ -24,7 +24,7 @@ class AppPrimaryButton extends StatelessWidget {
     this.isLoading = false,
     this.trailingIcon,
     this.leadingIcon,
-    this.backgroundColor = Colors.black,
+    this.backgroundColor = AppColors.ink,
     this.foregroundColor = Colors.white,
     this.height = 56,
     this.borderRadius = 16,
@@ -33,7 +33,10 @@ class AppPrimaryButton extends StatelessWidget {
 
   Widget _content() {
     if (isLoading) {
-      return AppSpinner(size: 20, color: foregroundColor);
+      return Semantics(
+        label: '$label, loading',
+        child: AppSpinner(size: 20, color: foregroundColor),
+      );
     }
     return Row(
       mainAxisAlignment: leadingIcon != null

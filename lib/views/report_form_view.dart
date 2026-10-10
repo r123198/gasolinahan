@@ -5,10 +5,16 @@ import 'package:provider/provider.dart';
 import '../viewmodels/report_viewmodel.dart';
 import '../models/brand_registry.dart';
 import '../models/station_model.dart';
+import '../components/app_form_error.dart';
 import '../components/app_primary_button.dart';
+import '../models/fill_up_validator.dart' show parseNumber;
+import '../models/report_validator.dart';
+import '../ui/number_input_formatter.dart';
+import 'fill_up_form_parts.dart' show FieldError;
 import '../components/app_circle_button.dart';
 import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
+import '../ui/adaptive/app_dialog.dart';
 import '../ui/adaptive/app_platform.dart';
 import '../ui/adaptive/app_tappable.dart';
 import '../ui/adaptive/app_picker.dart';
@@ -27,6 +33,28 @@ class _ReportFormViewState extends State<ReportFormView> {
   late TextEditingController _dieselCtrl;
   BrandInfo? _selectedBrand;
   StationModel? _selectedStation;
+  bool _submitted = false;
+  String? _brandError;
+  String? _stationError;
+  String? _formError;
+  ReportPriceErrors _priceErrors = const ReportPriceErrors();
+
+  /// Checks the form and stores the inline errors; true when it can submit.
+  bool _validateForm() {
+    _brandError = _selectedBrand == null ? 'Choose the station brand' : null;
+    _stationError = _selectedStation == null ? 'Choose the station' : null;
+    _priceErrors = validateReportPrices(
+      regular: _regularCtrl.text,
+      premium: _premiumCtrl.text,
+      diesel: _dieselCtrl.text,
+    );
+    return _brandError == null && _stationError == null && _priceErrors.isEmpty;
+  }
+
+  /// After the first submit attempt, errors clear as fields get fixed.
+  void _revalidate() {
+    if (_submitted) setState(_validateForm);
+  }
 
   @override
   void initState() {
@@ -81,8 +109,33 @@ class _ReportFormViewState extends State<ReportFormView> {
         };
   }
 
+  /// Back (button or system gesture) would throw away the photo, the
+  /// scanned prices and any edits, so ask first.
+  Future<void> _onPopInvoked(bool didPop, Object? result) async {
+    if (didPop) return;
+    final discard = await showAppConfirmDialog(
+      context: context,
+      title: 'Discard this report?',
+      message: 'Your photo and the prices you entered will be lost.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      isDestructive: true,
+    );
+    if (!discard || !mounted) return;
+    context.read<ReportViewModel>().reset();
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvoked,
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F5),
       body: SafeArea(
@@ -96,10 +149,8 @@ class _ReportFormViewState extends State<ReportFormView> {
                 children: [
                   AppCircleButton(
                     icon: Icons.arrow_back_ios_new,
-                    onPressed: () {
-                      context.read<ReportViewModel>().reset();
-                      Navigator.pop(context);
-                    },
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.maybePop(context),
                   ),
                   const Text(
                     'CONFIRM REPORT',
@@ -136,13 +187,14 @@ class _ReportFormViewState extends State<ReportFormView> {
                           'SELECT BRAND',
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 1.5,
                             color: Color(0xFF71717A),
                           ),
                         ),
                         const SizedBox(height: 12),
                         _buildBrandDropdown(),
+                        FieldError(_brandError),
                         const SizedBox(height: 20),
 
                         // Station selector (required)
@@ -150,13 +202,14 @@ class _ReportFormViewState extends State<ReportFormView> {
                           'SELECT STATION',
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 1.5,
                             color: Color(0xFF71717A),
                           ),
                         ),
                         const SizedBox(height: 12),
                         _buildStationPicker(context),
+                        FieldError(_stationError),
                         const SizedBox(height: 20),
 
                         // Prices section
@@ -164,29 +217,42 @@ class _ReportFormViewState extends State<ReportFormView> {
                           'FUEL PRICES',
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 1.5,
                             color: Color(0xFF71717A),
                           ),
                         ),
                         const SizedBox(height: 12),
+                        const Text(
+                          'Leave blank any fuel the board doesn\'t show.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
                         _buildPriceField(
                           label: _productLabel(FuelCategory.regular),
                           controller: _regularCtrl,
                           color: const Color(0xFF2563EB),
+                          error: _priceErrors.regular,
                         ),
                         const SizedBox(height: 10),
                         _buildPriceField(
                           label: _productLabel(FuelCategory.premium),
                           controller: _premiumCtrl,
                           color: const Color(0xFFDC2626),
+                          error: _priceErrors.premium,
                         ),
                         const SizedBox(height: 10),
                         _buildPriceField(
                           label: _productLabel(FuelCategory.diesel),
                           controller: _dieselCtrl,
-                          color: const Color(0xFF16A34A),
+                          color: AppColors.goStrong,
+                          error: _priceErrors.diesel,
+                          isLast: true,
                         ),
+                        FieldError(_priceErrors.general),
                         const SizedBox(height: 20),
 
                         // Location info
@@ -205,11 +271,19 @@ class _ReportFormViewState extends State<ReportFormView> {
               builder: (context, vm, _) {
                 return Padding(
                   padding: const EdgeInsets.all(24),
-                  child: AppPrimaryButton(
-                    label: 'Submit Report',
-                    isLoading: vm.step == ReportStep.submitting,
-                    trailingIcon: Icons.send_rounded,
-                    onPressed: () => _submit(vm),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AppFormError(message: _formError),
+                      AppPrimaryButton(
+                        label: 'Submit report',
+                        isLoading: vm.step == ReportStep.submitting,
+                        trailingIcon: Icons.send_rounded,
+                        onPressed: vm.step == ReportStep.submitting
+                            ? null
+                            : () => _submit(vm),
+                      ),
+                    ],
                   ),
                 );
               },
@@ -260,7 +334,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFFD4D4D8),
+                        color: AppColors.textMuted,
                       ),
                     ),
                   ],
@@ -309,6 +383,7 @@ class _ReportFormViewState extends State<ReportFormView> {
           _selectedStation!.brand.toLowerCase() != brand.name.toLowerCase()) {
         _selectedStation = null;
       }
+      if (_submitted) _validateForm();
     });
   }
 
@@ -344,7 +419,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFFD4D4D8),
+                            color: AppColors.textMuted,
                           ),
                         ),
                       ],
@@ -454,11 +529,13 @@ class _ReportFormViewState extends State<ReportFormView> {
                   final accent = brandAccent(s.brand);
                   final dist = distances[s.id];
                   final isNear = dist != null && dist <= 200;
-                  return GestureDetector(
+                  return AppTappable(
+                    borderRadius: BorderRadius.circular(16),
                     onTap: () {
                       setState(() {
                         _selectedStation = s;
                         _selectedBrand ??= BrandRegistry.findByName(s.brand);
+                        if (_submitted) _validateForm();
                       });
                       vm.setStationId(s.id);
                       vm.setStationName(s.name);
@@ -469,12 +546,12 @@ class _ReportFormViewState extends State<ReportFormView> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: isNear
-                            ? const Color(0xFF16A34A).withValues(alpha: 0.04)
+                            ? AppColors.goStrong.withValues(alpha: 0.04)
                             : const Color(0xFFF9FAFB),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isNear
-                              ? const Color(0xFF16A34A).withValues(alpha: 0.25)
+                              ? AppColors.goStrong.withValues(alpha: 0.25)
                               : const Color(0xFFE5E7EB),
                           width: isNear ? 1.5 : 1,
                         ),
@@ -503,9 +580,9 @@ class _ReportFormViewState extends State<ReportFormView> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: isNear
-                                        ? const Color(
-                                            0xFF16A34A,
-                                          ).withValues(alpha: 0.10)
+                                        ? AppColors.goStrong.withValues(
+                                            alpha: 0.10,
+                                          )
                                         : const Color(0xFFF4F4F5),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
@@ -513,9 +590,9 @@ class _ReportFormViewState extends State<ReportFormView> {
                                     ReportViewModel.formatDistance(dist),
                                     style: TextStyle(
                                       fontSize: 10,
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w700,
                                       color: isNear
-                                          ? const Color(0xFF16A34A)
+                                          ? AppColors.goStrong
                                           : const Color(0xFF71717A),
                                     ),
                                   ),
@@ -554,7 +631,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                 'No ${_selectedBrand!.name} stations found nearby. Try selecting a different brand.',
                 style: const TextStyle(
                   fontSize: 12,
-                  color: Color(0xFF94A3B8),
+                  color: AppColors.textMuted,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -566,7 +643,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                 'Please select a brand above to see nearby stations.',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Color(0xFF94A3B8),
+                  color: AppColors.textMuted,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -591,7 +668,7 @@ class _ReportFormViewState extends State<ReportFormView> {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: isNear
-                  ? const Color(0xFF16A34A).withValues(alpha: 0.30)
+                  ? AppColors.goStrong.withValues(alpha: 0.30)
                   : accent.withValues(alpha: 0.30),
             ),
             boxShadow: const [
@@ -623,7 +700,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                       s.name,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     Row(
@@ -650,8 +727,8 @@ class _ReportFormViewState extends State<ReportFormView> {
                             isNear ? Icons.check_circle : Icons.info_outline,
                             size: 12,
                             color: isNear
-                                ? const Color(0xFF16A34A)
-                                : const Color(0xFFEAB308),
+                                ? AppColors.goStrong
+                                : AppColors.warning,
                           ),
                           const SizedBox(width: 3),
                           Text(
@@ -660,8 +737,8 @@ class _ReportFormViewState extends State<ReportFormView> {
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                               color: isNear
-                                  ? const Color(0xFF16A34A)
-                                  : const Color(0xFFEAB308),
+                                  ? AppColors.goStrong
+                                  : AppColors.warning,
                             ),
                           ),
                         ],
@@ -701,7 +778,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                 color: const Color(0xFFFEF3C7),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: const Color(0xFFEAB308).withValues(alpha: 0.30),
+                  color: AppColors.warning.withValues(alpha: 0.30),
                 ),
               ),
               child: Row(
@@ -709,7 +786,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                   const Icon(
                     Icons.warning_amber_rounded,
                     size: 18,
-                    color: Color(0xFFD97706),
+                    color: AppColors.warning,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -776,7 +853,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                   children: [
                     const Icon(
                       Icons.check_circle,
-                      color: Color(0xFFBF94FF),
+                      color: AppColors.accent,
                       size: 16,
                     ),
                     const SizedBox(width: 6),
@@ -807,16 +884,14 @@ class _ReportFormViewState extends State<ReportFormView> {
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFFBF94FF).withValues(alpha: 0.08),
+          color: AppColors.accent.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: const Color(0xFFBF94FF).withValues(alpha: 0.20),
-          ),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.20)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.auto_awesome, size: 18, color: Color(0xFFBF94FF)),
+            const Icon(Icons.auto_awesome, size: 18, color: AppColors.accent),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -827,7 +902,7 @@ class _ReportFormViewState extends State<ReportFormView> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFFBF94FF),
+                      color: AppColors.accent,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -854,13 +929,38 @@ class _ReportFormViewState extends State<ReportFormView> {
     required String label,
     required TextEditingController controller,
     required Color color,
+    String? error,
+    bool isLast = false,
   }) {
+    final action = isLast ? TextInputAction.done : TextInputAction.next;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          label: '$label price in pesos',
+          textField: true,
+          child: _priceRow(label, controller, color, error, action),
+        ),
+        FieldError(error),
+      ],
+    );
+  }
+
+  Widget _priceRow(
+    String label,
+    TextEditingController controller,
+    Color color,
+    String? error,
+    TextInputAction action,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0x0A000000)),
+        border: Border.all(
+          color: error != null ? AppColors.error : const Color(0x0A000000),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A000000),
@@ -895,56 +995,64 @@ class _ReportFormViewState extends State<ReportFormView> {
             '\u20B1',
             style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               color: Color(0xFF71717A),
             ),
           ),
           const SizedBox(width: 4),
-          SizedBox(
-            width: 80,
-            child: isCupertino(context)
-                ? CupertinoTextField(
-                    controller: controller,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      fontFamily: AppTheme.fontFamily,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black,
-                    ),
-                    placeholder: '0.00',
-                    placeholderStyle: const TextStyle(
-                      fontFamily: AppTheme.fontFamily,
-                      color: Color(0xFFD4D4D8),
-                      fontWeight: FontWeight.w700,
-                    ),
-                    padding: EdgeInsets.zero,
-                    decoration: null,
-                  )
-                : TextField(
-                    controller: controller,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      hintText: '0.00',
-                      hintStyle: TextStyle(
-                        color: Color(0xFFD4D4D8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 80, maxWidth: 120),
+            child: IntrinsicWidth(
+              child: isCupertino(context)
+                  ? CupertinoTextField(
+                      controller: controller,
+                      textInputAction: action,
+                      inputFormatters: [numberInputFormatter()],
+                      onChanged: (_) => _revalidate(),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontFamily: AppTheme.fontFamily,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black,
+                      ),
+                      placeholder: '0.00',
+                      placeholderStyle: const TextStyle(
+                        fontFamily: AppTheme.fontFamily,
+                        color: AppColors.textMuted,
                         fontWeight: FontWeight.w700,
                       ),
-                      contentPadding: EdgeInsets.zero,
-                      isDense: true,
+                      padding: EdgeInsets.zero,
+                      decoration: null,
+                    )
+                  : TextField(
+                      controller: controller,
+                      textInputAction: action,
+                      inputFormatters: [numberInputFormatter()],
+                      onChanged: (_) => _revalidate(),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: '0.00',
+                        hintStyle: TextStyle(
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                        isDense: true,
+                      ),
                     ),
-                  ),
+            ),
           ),
         ],
       ),
@@ -958,15 +1066,13 @@ class _ReportFormViewState extends State<ReportFormView> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF16A34A).withValues(alpha: 0.06),
+        color: AppColors.goStrong.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF16A34A).withValues(alpha: 0.15),
-        ),
+        border: Border.all(color: AppColors.goStrong.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.location_on, size: 18, color: Color(0xFF16A34A)),
+          const Icon(Icons.location_on, size: 18, color: AppColors.goStrong),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -974,7 +1080,7 @@ class _ReportFormViewState extends State<ReportFormView> {
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF16A34A),
+                color: AppColors.goStrong,
               ),
             ),
           ),
@@ -987,29 +1093,25 @@ class _ReportFormViewState extends State<ReportFormView> {
 
   Future<void> _submit(ReportViewModel vm) async {
     // Update VM with form values
-    vm.setRegularPrice(double.tryParse(_regularCtrl.text) ?? 0.0);
-    vm.setPremiumPrice(double.tryParse(_premiumCtrl.text) ?? 0.0);
-    vm.setDieselPrice(double.tryParse(_dieselCtrl.text) ?? 0.0);
+    FocusScope.of(context).unfocus();
+    final isValid = _validateForm();
+    setState(() {
+      _submitted = true;
+      _formError = null;
+    });
+    if (!isValid) return;
 
-    // Require brand
-    if (_selectedBrand == null) {
-      showAppToast(context, 'Please select a station brand.');
-      return;
-    }
+    vm.setRegularPrice(parseNumber(_regularCtrl.text) ?? 0.0);
+    vm.setPremiumPrice(parseNumber(_premiumCtrl.text) ?? 0.0);
+    vm.setDieselPrice(parseNumber(_dieselCtrl.text) ?? 0.0);
     vm.setBrand(_selectedBrand!.name);
-
-    // Require station
-    if (_selectedStation == null) {
-      showAppToast(context, 'Please select a station.');
-      return;
-    }
     vm.setStationId(_selectedStation!.id);
     vm.setStationName(_selectedStation!.name);
 
-    // Pre-validate before submitting
+    // Rules only the view model knows (rate limit, GPS fix).
     final validationError = vm.validateReport();
     if (validationError != null) {
-      showAppToast(context, validationError);
+      setState(() => _formError = validationError);
       return;
     }
 
@@ -1021,12 +1123,14 @@ class _ReportFormViewState extends State<ReportFormView> {
         showAppToast(
           context,
           'Saved offline. Will sync when connected.',
-          backgroundColor: const Color(0xFFBF94FF),
+          backgroundColor: AppColors.accent,
         );
       }
       Navigator.pushNamedAndRemoveUntil(context, '/success', (route) => false);
     } else {
-      showAppToast(context, vm.errorMessage ?? 'Could not submit report');
+      setState(
+        () => _formError = vm.errorMessage ?? 'Could not submit the report.',
+      );
     }
   }
 }

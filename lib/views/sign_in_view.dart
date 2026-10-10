@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/auth_viewmodel.dart';
+import '../components/app_form_error.dart';
 import '../components/app_primary_button.dart';
 import '../components/app_text_field.dart';
-import '../components/app_circle_button.dart';
-import '../components/app_social_button.dart';
-import '../components/app_divider_with_text.dart';
 import '../ui/adaptive/app_text_button.dart';
-import '../ui/adaptive/app_platform.dart';
 import '../ui/adaptive/app_toast.dart';
 import '../ui/app_theme.dart';
+import '../ui/form_validators.dart';
+import 'auth_header.dart';
 
 class SignInView extends StatefulWidget {
   const SignInView({super.key});
@@ -19,9 +19,12 @@ class SignInView extends StatefulWidget {
 }
 
 class _SignInViewState extends State<SignInView> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  String? _emailError;
+  String? _passwordError;
+  String? _formError;
 
   @override
   void dispose() {
@@ -30,213 +33,130 @@ class _SignInViewState extends State<SignInView> {
     super.dispose();
   }
 
+  bool _validate() {
+    setState(() {
+      _emailError = validateEmail(_emailController.text);
+      _passwordError = validateRequired(
+        _passwordController.text,
+        'your password',
+      );
+      _formError = null;
+    });
+    return _emailError == null && _passwordError == null;
+  }
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    if (!_validate()) return;
+    final auth = context.read<AuthViewModel>();
+    final success = await auth.signIn(
+      _emailController.text,
+      _passwordController.text,
+    );
+    if (!mounted) return;
+    if (success) {
+      TextInput.finishAutofillContext();
+      Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (_) => false);
+      return;
+    }
+    setState(() => _formError = auth.errorMessage ?? 'Sign in failed.');
+    auth.clearError();
+  }
+
+  Future<void> _forgotPassword() async {
+    final emailError = validateEmail(_emailController.text);
+    if (emailError != null) {
+      setState(
+        () => _emailError =
+            'Enter your email above, then tap '
+            '"Forgot password?" again',
+      );
+      return;
+    }
+    final error = await context.read<AuthViewModel>().sendPasswordReset(
+      _emailController.text,
+    );
+    if (!mounted) return;
+    showAppToast(
+      context,
+      error ?? 'Reset link sent to ${_emailController.text.trim()}',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isLoading = context.select<AuthViewModel, bool>((a) => a.isLoading);
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Row(
-                children: [
-                  AppCircleButton(
-                    icon: Icons.arrow_back,
-                    onPressed: () => Navigator.pop(context),
-                    border: Border.all(color: Colors.transparent, width: 2),
-                    boxShadow: const [],
-                  ),
-                  const Spacer(),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 16),
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x33000000),
-                            offset: Offset(4, 4),
-                            blurRadius: 0,
-                          ),
-                        ],
-                      ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.local_gas_station,
-                          color: Colors.white,
-                          size: 40,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Gasolinahan',
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Locate stations. Compare prices. Report.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                    AppTextField(
-                      controller: _emailController,
-                      label: 'EMAIL ADDRESS',
-                      hint: 'hello@gasolinahan.com',
-                      icon: Icons.mail_outline,
-                    ),
-                    const SizedBox(height: 20),
-                    AppTextField(
-                      controller: _passwordController,
-                      label: 'PASSWORD',
-                      hint: '••••••••',
-                      icon: Icons.lock_outline,
-                      isPassword: true,
-                      obscureText: _obscurePassword,
-                      onToggleObscure: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: isCupertino(context)
-                          ? AppTextButton(
-                              onPressed: () {},
-                              foregroundColor: Colors.black,
-                              padding: EdgeInsets.zero,
-                              child: const Text(
-                                'Forgot Password?',
-                                style: TextStyle(
-                                  fontFamily: AppTheme.fontFamily,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            )
-                          : TextButton(
-                              onPressed: () {},
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.black,
-                                padding: EdgeInsets.zero,
-                                minimumSize: Size.zero,
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: const Text(
-                                'Forgot Password?',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 24),
-                    Consumer<AuthViewModel>(
-                      builder: (context, authViewModel, child) {
-                        return AppPrimaryButton(
-                          label: 'Sign In',
-                          isLoading: authViewModel.isLoading,
-                          trailingIcon: Icons.arrow_forward,
-                          borderRadius: 12,
-                          onPressed: () async {
-                            final success = await authViewModel.signIn(
-                              _emailController.text,
-                              _passwordController.text,
-                            );
-                            if (success && context.mounted) {
-                              Navigator.pushReplacementNamed(
-                                context,
-                                '/dashboard',
-                              );
-                            } else if (!success && context.mounted) {
-                              showAppToast(
-                                context,
-                                authViewModel.errorMessage ?? 'Sign in failed',
-                                backgroundColor: Colors.red,
-                              );
-                              authViewModel.clearError();
-                            }
-                          },
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    const AppDividerWithText(text: 'OR CONTINUE WITH'),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: AppSocialButton(
-                            label: 'Google',
-                            icon: Icons.g_mobiledata,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: AppSocialButton(
-                            label: 'Apple',
-                            icon: Icons.apple,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text(
-                          "Don't have an account? ",
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.pushNamed(context, '/register');
-                          },
-                          child: const Text(
-                            'Sign Up',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: AutofillGroup(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const AuthHeader(
+                  title: 'Welcome back',
+                  subtitle: 'Sign in to compare prices and track your gas.',
                 ),
-              ),
+                const SizedBox(height: 32),
+                AppTextField(
+                  controller: _emailController,
+                  label: 'Email',
+                  hint: 'juan@mail.com',
+                  icon: Icons.mail_outline,
+                  errorText: _emailError,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.email],
+                ),
+                const SizedBox(height: 20),
+                AppTextField(
+                  controller: _passwordController,
+                  label: 'Password',
+                  hint: 'Your password',
+                  icon: Icons.lock_outline,
+                  isPassword: true,
+                  obscureText: _obscurePassword,
+                  errorText: _passwordError,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.password],
+                  onSubmitted: (_) => _submit(),
+                  onToggleObscure: () {
+                    setState(() => _obscurePassword = !_obscurePassword);
+                  },
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: AppTextButton(
+                    onPressed: isLoading ? null : _forgotPassword,
+                    foregroundColor: AppColors.ink,
+                    child: const Text(
+                      'Forgot password?',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontFamily,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                AppFormError(message: _formError),
+                AppPrimaryButton(
+                  label: 'Sign in',
+                  isLoading: isLoading,
+                  onPressed: isLoading ? null : _submit,
+                ),
+                const SizedBox(height: 24),
+                AuthSwitchPrompt(
+                  prompt: "Don't have an account?",
+                  action: 'Create one',
+                  onPressed: () => Navigator.pushNamed(context, '/register'),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

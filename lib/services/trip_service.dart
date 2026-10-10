@@ -84,9 +84,9 @@ class TripService {
   }
 
   Map<String, Object?> _pointRow(int tripId, TripPoint p) => {
-        'tripId': tripId,
-        'latitude': p.latitude,
-        'longitude': p.longitude,
-        'timestamp': p.timestamp.toIso8601String(),
-      };
+    'tripId': tripId,
+    'latitude': p.latitude,
+    'longitude': p.longitude,
+    'timestamp': p.timestamp.toIso8601String(),
+  };
 }

@@ -1,13 +1,49 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 
+/// Columns added to fill_ups after v4, with their definitions.
+const _fillUpDetailColumns = {
+  'pricePerLiter': 'REAL',
+  'notes': "TEXT NOT NULL DEFAULT ''",
+  'photoPaths': "TEXT NOT NULL DEFAULT '[]'",
+};
+
+/// ALTER statements that bring a fill_ups table with [existingColumns] up to
+/// date. Safe to apply repeatedly: present columns are skipped.
+List<String> missingFillUpColumnStatements(Set<String> existingColumns) => [
+  for (final MapEntry(key: name, value: type) in _fillUpDetailColumns.entries)
+    if (!existingColumns.contains(name))
+      'ALTER TABLE fill_ups ADD COLUMN $name $type',
+];
+
 class OfflineDatabaseService {
   static Database? _db;
 
-  static Future<Database> get database async {
-    if (_db != null) return _db!;
-    _db = await _initDb();
-    return _db!;
+  /// Shared open-and-check step, so concurrent first callers don't both
+  /// run the column check (a duplicate ALTER would fail). A hot reload keeps
+  /// an already-open [_db] — so onUpgrade never runs — but starts this
+  /// field fresh, so the check still happens once.
+  static Future<Database>? _ready;
+
+  static Future<Database> get database => _ready ??= _openChecked();
+
+  static Future<Database> _openChecked() async {
+    try {
+      final db = _db ??= await _initDb();
+      await _ensureFillUpColumns(db);
+      return db;
+    } catch (_) {
+      _ready = null; // let the next call retry instead of caching a failure
+      rethrow;
+    }
+  }
+
+  static Future<void> _ensureFillUpColumns(Database db) async {
+    final info = await db.rawQuery('PRAGMA table_info(fill_ups)');
+    final existing = {for (final row in info) row['name'] as String};
+    for (final statement in missingFillUpColumnStatements(existing)) {
+      await db.execute(statement);
+    }
   }
 
   static Future<Database> _initDb() async {
@@ -15,7 +51,7 @@ class OfflineDatabaseService {
     final path = p.join(dbPath, 'gasolinahan.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await _createPendingReports(db);
@@ -30,6 +66,7 @@ class OfflineDatabaseService {
             'ALTER TABLE trips ADD COLUMN isActive INTEGER NOT NULL DEFAULT 0',
           );
         }
+        if (oldVersion < 5) await _ensureFillUpColumns(db);
       },
     );
   }
@@ -74,7 +111,9 @@ class OfflineDatabaseService {
             FOREIGN KEY (tripId) REFERENCES trips (id) ON DELETE CASCADE
           )
         ''');
-    await db.execute('CREATE INDEX idx_trip_points_trip ON trip_points (tripId)');
+    await db.execute(
+      'CREATE INDEX idx_trip_points_trip ON trip_points (tripId)',
+    );
   }
 
   static Future<void> _createFillUps(Database db) {
@@ -88,7 +127,10 @@ class OfflineDatabaseService {
             amountSpent REAL NOT NULL,
             liters REAL,
             odometerKm REAL NOT NULL,
-            timestamp TEXT NOT NULL
+            timestamp TEXT NOT NULL,
+            pricePerLiter REAL,
+            notes TEXT NOT NULL DEFAULT '',
+            photoPaths TEXT NOT NULL DEFAULT '[]'
           )
         ''');
   }

@@ -7,10 +7,11 @@ import '../ui/tracker_format.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
+import '../ui/app_theme.dart';
 
 const _defaultLiters = 15.0;
-const _worthGreen = Color(0xFF16A34A);
-const _notWorthAmber = Color(0xFFD97706);
+const _worthGreen = AppColors.goStrong;
+const _notWorthAmber = AppColors.warning;
 
 /// "Worth the trip?" — weighs a station's cheaper price against the fuel the
 /// extra driving burns, using the user's own cost per km.
@@ -66,7 +67,8 @@ class DetourCard extends StatelessWidget {
       );
     }
     final v = advice.verdict;
-    final detail = '${advice.nearest.name} is closer at '
+    final detail =
+        '${advice.nearest.name} is closer at '
         '₱${advice.priceHere.toStringAsFixed(2)}/L. '
         'Here saves ~${formatPesos(v.savings)} on ${liters.toStringAsFixed(0)} L, '
         'but ${formatKmShort(advice.extraKm)} extra driving costs '
@@ -113,7 +115,7 @@ class _Panel extends StatelessWidget {
             title,
             style: TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               color: color,
             ),
           ),

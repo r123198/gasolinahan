@@ -44,13 +44,16 @@ DetourAdvice? adviseDetour({
   double distanceTo(StationModel s) =>
       haversineMeters(userLat, userLng, s.latitude, s.longitude);
 
-  final others = stations
-      .where((s) =>
-          s.id != target.id &&
-          priceOf(s) > 0 &&
-          (s.latitude != 0 || s.longitude != 0))
-      .toList()
-    ..sort((a, b) => distanceTo(a).compareTo(distanceTo(b)));
+  final others =
+      stations
+          .where(
+            (s) =>
+                s.id != target.id &&
+                priceOf(s) > 0 &&
+                (s.latitude != 0 || s.longitude != 0),
+          )
+          .toList()
+        ..sort((a, b) => distanceTo(a).compareTo(distanceTo(b)));
   if (others.isEmpty) return null;
 
   final closestOther = others.first;

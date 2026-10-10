@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 
 class AppStatCard extends StatelessWidget {
   final String value;
@@ -13,7 +14,7 @@ class AppStatCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: const [
             BoxShadow(
               color: Color(0x0D000000),
@@ -27,19 +28,19 @@ class AppStatCard extends StatelessWidget {
             Text(
               value,
               style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
             const SizedBox(height: 4),
             Text(
               label,
               style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-                letterSpacing: 0.5,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textMuted,
               ),
             ),
           ],

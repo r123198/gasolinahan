@@ -7,10 +7,12 @@ import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
-import '../models/brand_registry.dart';
 import '../models/station_model.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
+import '../viewmodels/fill_up_nudge_viewmodel.dart';
+import '../viewmodels/fill_up_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
+import 'fill_up_form_sheet.dart';
 import '../components/track_me_button.dart';
 import '../components/detour_card.dart';
 import '../ui/adaptive/app_icon_button.dart';
@@ -23,13 +25,32 @@ import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
 import '../components/app_empty_state.dart';
 import '../components/app_primary_button.dart';
+import '../components/brand_logo.dart';
+import '../components/report_price_fab.dart';
 import 'home_view.dart';
+import 'profile_view.dart';
 
-Widget brandLogoWidget(String brandName, double size) {
-  final brand = BrandRegistry.findByName(brandName);
-  if (brand != null) return brand.logo(size: size);
-  return Icon(Icons.local_gas_station_rounded, size: size * 0.7, color: brandAccent(brandName));
-}
+/// One bottom-navigation destination.
+typedef _NavTab = ({IconData icon, IconData selectedIcon, String label});
+
+const List<_NavTab> _tabs = [
+  (
+    icon: Icons.local_gas_station_outlined,
+    selectedIcon: Icons.local_gas_station,
+    label: 'Tracker',
+  ),
+  (icon: Icons.map_outlined, selectedIcon: Icons.map, label: 'Prices'),
+  (
+    icon: Icons.account_circle_outlined,
+    selectedIcon: Icons.account_circle,
+    label: 'Account',
+  ),
+];
+
+/// Stations list snap points, as fractions of the map tab's height.
+const _sheetPeek = 0.14;
+const _sheetHalf = 0.42;
+const _sheetFull = 0.78;
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -42,6 +63,7 @@ class _DashboardViewState extends State<DashboardView> {
   int _selectedIndex = 0;
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
+  final ValueNotifier<double> _sheetExtent = ValueNotifier(_sheetHalf);
   final MapController _mapController = MapController();
   final Location _location = Location();
 
@@ -59,18 +81,54 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   void initState() {
     super.initState();
+    _stationsVm = context.read<DashboardViewModel>();
+    _fillUpsVm = context.read<FillUpViewModel>();
+    _nudgesVm = context.read<FillUpNudgeViewModel>();
     _searchController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DashboardViewModel>().listenToStations();
-      context.read<TripViewModel>().startMonitoring();
+      _startTripsAndNudges();
       _initLocation();
     });
   }
 
+  // Kept so the listeners can be removed in dispose without using context.
+  late final DashboardViewModel _stationsVm;
+  late final FillUpViewModel _fillUpsVm;
+  late final FillUpNudgeViewModel _nudgesVm;
+
   @override
   void dispose() {
+    _stationsVm.removeListener(_syncNudgeStations);
+    _fillUpsVm.removeListener(_syncNudgeFillUps);
+    _nudgesVm.removeListener(_openNudgedFillUp);
     _searchController.dispose();
+    _sheetExtent.dispose();
     super.dispose();
+  }
+
+  /// Trip recording and "Did you fill up?" nudges share one location stream.
+  Future<void> _startTripsAndNudges() async {
+    final trips = context.read<TripViewModel>();
+    _stationsVm.addListener(_syncNudgeStations);
+    _fillUpsVm.addListener(_syncNudgeFillUps);
+    _nudgesVm.addListener(_openNudgedFillUp);
+    _syncNudgeStations();
+    _syncNudgeFillUps();
+    await trips.startMonitoring();
+    await _nudgesVm.start(trips.locationUpdates);
+    _openNudgedFillUp(); // the app may have been opened from a nudge
+  }
+
+  void _syncNudgeStations() =>
+      _nudgesVm.updateStations(_stationsVm.nearbyStations);
+
+  void _syncNudgeFillUps() => _nudgesVm.updateFillUps(_fillUpsVm.fillUps);
+
+  void _openNudgedFillUp() {
+    if (!mounted) return;
+    final station = _nudgesVm.takePendingStation();
+    if (station != null) showFillUpForm(context, atStation: station);
   }
 
   Future<void> _initLocation() async {
@@ -96,10 +154,7 @@ class _DashboardViewState extends State<DashboardView> {
           _userLat = loc.latitude;
           _userLng = loc.longitude;
         });
-        _mapController.move(
-          LatLng(loc.latitude!, loc.longitude!),
-          14.0,
-        );
+        _mapController.move(LatLng(loc.latitude!, loc.longitude!), 14.0);
       }
     } catch (_) {}
   }
@@ -112,10 +167,7 @@ class _DashboardViewState extends State<DashboardView> {
           _userLat = loc.latitude;
           _userLng = loc.longitude;
         });
-        _mapController.move(
-          LatLng(loc.latitude!, loc.longitude!),
-          15.0,
-        );
+        _mapController.move(LatLng(loc.latitude!, loc.longitude!), 15.0);
       }
     } catch (_) {
       if (mounted) {
@@ -125,14 +177,6 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   void _onItemTapped(int index) {
-    if (index == 2) {
-      Navigator.pushNamed(context, '/report');
-      return;
-    }
-    if (index == 3) {
-      Navigator.pushNamed(context, '/profile');
-      return;
-    }
     setState(() {
       _selectedIndex = index;
     });
@@ -187,9 +231,7 @@ class _DashboardViewState extends State<DashboardView> {
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: accent.withValues(alpha: 0.20),
-                      ),
+                      border: Border.all(color: accent.withValues(alpha: 0.20)),
                     ),
                     child: brandLogoWidget(station.brand, 36),
                   ),
@@ -202,7 +244,7 @@ class _DashboardViewState extends State<DashboardView> {
                           station.name,
                           style: const TextStyle(
                             fontSize: 18,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: -0.3,
                           ),
                         ),
@@ -213,7 +255,7 @@ class _DashboardViewState extends State<DashboardView> {
                               : station.brand,
                           style: const TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF64748B),
+                            color: AppColors.textMuted,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -234,7 +276,7 @@ class _DashboardViewState extends State<DashboardView> {
                         station.brand,
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           color: accent,
                         ),
                       ),
@@ -262,7 +304,7 @@ class _DashboardViewState extends State<DashboardView> {
                   _buildPriceCard(
                     'Diesel',
                     station.dieselPrice,
-                    const Color(0xFF16A34A),
+                    AppColors.goStrong,
                     scheme,
                   ),
                 ],
@@ -274,7 +316,7 @@ class _DashboardViewState extends State<DashboardView> {
                   const Icon(
                     Icons.schedule,
                     size: 14,
-                    color: Color(0xFF94A3B8),
+                    color: AppColors.textMuted,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -282,7 +324,7 @@ class _DashboardViewState extends State<DashboardView> {
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF94A3B8),
+                      color: AppColors.textMuted,
                     ),
                   ),
                 ],
@@ -340,8 +382,8 @@ class _DashboardViewState extends State<DashboardView> {
               price > 0 ? formatPhp(price) : '\u2014',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: price > 0 ? color : const Color(0xFFD4D4D8),
+                fontWeight: FontWeight.w700,
+                color: price > 0 ? color : AppColors.textMuted,
                 letterSpacing: -0.5,
               ),
             ),
@@ -353,11 +395,16 @@ class _DashboardViewState extends State<DashboardView> {
 
   /// Haversine distance in meters
   static double _haversineMeters(
-      double lat1, double lon1, double lat2, double lon2) {
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
     const R = 6371000.0;
     final dLat = (lat2 - lat1) * math.pi / 180;
     final dLon = (lon2 - lon1) * math.pi / 180;
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(lat1 * math.pi / 180) *
             math.cos(lat2 * math.pi / 180) *
             math.sin(dLon / 2) *
@@ -371,17 +418,22 @@ class _DashboardViewState extends State<DashboardView> {
     if (_userLat == null || _userLng == null) return null;
 
     double priceOf(StationModel s) => switch (fuelType) {
-          FuelType.regular => s.regularPrice,
-          FuelType.premium => s.premiumPrice,
-          FuelType.diesel => s.dieselPrice,
-        };
+      FuelType.regular => s.regularPrice,
+      FuelType.premium => s.premiumPrice,
+      FuelType.diesel => s.dieselPrice,
+    };
 
     StationModel? best;
     double bestPrice = double.infinity;
 
     for (final s in stations) {
       if (s.latitude == 0 && s.longitude == 0) continue;
-      final dist = _haversineMeters(_userLat!, _userLng!, s.latitude, s.longitude);
+      final dist = _haversineMeters(
+        _userLat!,
+        _userLng!,
+        s.latitude,
+        s.longitude,
+      );
       if (dist > 5000) continue; // only within 5km
       final p = priceOf(s);
       if (p <= 0) continue; // skip stations without price
@@ -401,12 +453,16 @@ class _DashboardViewState extends State<DashboardView> {
       extendBody: true,
       resizeToAvoidBottomInset: false,
       backgroundColor: const Color(0xFFF4F6F9),
-      body: _selectedIndex == 0
-          ? SafeArea(
-              bottom: false,
-              child: const HomeView(),
-            )
-          : _buildMapTab(scheme),
+      // IndexedStack keeps each tab alive, so the map keeps its position
+      // and the tracker keeps its scroll offset when switching tabs.
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          const SafeArea(bottom: false, child: HomeView()),
+          _buildMapTab(scheme),
+          const SafeArea(bottom: false, child: ProfileView()),
+        ],
+      ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         child: ClipRRect(
@@ -414,33 +470,19 @@ class _DashboardViewState extends State<DashboardView> {
           child: isCupertino(context)
               ? _buildCupertinoTabBar(scheme)
               : NavigationBar(
-            selectedIndex: _selectedIndex,
-            backgroundColor: Colors.white.withValues(alpha: 0.96),
-            indicatorColor: scheme.primary.withValues(alpha: 0.10),
-            onDestinationSelected: _onItemTapped,
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Home',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.map_outlined),
-                selectedIcon: Icon(Icons.map),
-                label: 'Map',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.add_a_photo_outlined),
-                selectedIcon: Icon(Icons.add_a_photo),
-                label: 'Report',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Profile',
-              ),
-            ],
-          ),
+                  selectedIndex: _selectedIndex,
+                  backgroundColor: Colors.white.withValues(alpha: 0.97),
+                  indicatorColor: AppColors.surfaceMuted,
+                  onDestinationSelected: _onItemTapped,
+                  destinations: [
+                    for (final tab in _tabs)
+                      NavigationDestination(
+                        icon: Icon(tab.icon),
+                        selectedIcon: Icon(tab.selectedIcon),
+                        label: tab.label,
+                      ),
+                  ],
+                ),
         ),
       ),
     );
@@ -464,12 +506,13 @@ class _DashboardViewState extends State<DashboardView> {
                     _buildIconButton(
                       context: context,
                       icon: Icons.my_location_outlined,
+                      tooltip: 'Go to my location',
                       onPressed: _goToMyLocation,
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                _FuelChips(onMapTap: () {}),
+                const _FuelChips(),
                 const SizedBox(height: 12),
                 const Align(
                   alignment: Alignment.centerLeft,
@@ -479,39 +522,28 @@ class _DashboardViewState extends State<DashboardView> {
             ),
           ),
         ),
-        Positioned(
-          right: 16,
-          top: 210,
-          child: Column(
-            children: [
-              _buildFloatingButton(
-                icon: Icons.layers_outlined,
-                bgColor: Colors.white,
-                iconColor: scheme.primary,
-                onPressed: () {},
-              ),
-              const SizedBox(height: 12),
-              _buildFloatingButton(
-                icon: Icons.near_me_outlined,
-                bgColor: scheme.primary,
-                iconColor: Colors.white,
-                onPressed: _goToMyLocation,
-              ),
-            ],
+        NotificationListener<DraggableScrollableNotification>(
+          onNotification: (n) {
+            _sheetExtent.value = n.extent;
+            return false;
+          },
+          child: Consumer<DashboardViewModel>(
+            builder: (context, vm, _) {
+              return _StationsSheet(
+                controller: _sheetController,
+                cheapestId: _cheapestNearbyId(vm.nearbyStations, vm.fuelType),
+                userLat: _userLat,
+                userLng: _userLng,
+                onStationTap: (station) {
+                  _showStationDetail(station);
+                },
+              );
+            },
           ),
         ),
-        Consumer<DashboardViewModel>(
-          builder: (context, vm, _) {
-            return _StationsSheet(
-              controller: _sheetController,
-              cheapestId: _cheapestNearbyId(vm.nearbyStations, vm.fuelType),
-              userLat: _userLat,
-              userLng: _userLng,
-              onStationTap: (station) {
-                _showStationDetail(station);
-              },
-            );
-          },
+        ReportPriceFab(
+          sheetExtent: _sheetExtent,
+          onPressed: () => Navigator.pushNamed(context, '/report'),
         ),
       ],
     );
@@ -530,9 +562,9 @@ class _DashboardViewState extends State<DashboardView> {
           };
           final accent = brandAccent(s.brand);
           final isCheapest = s.id == cheapestId;
-          final markerColor = isCheapest ? const Color(0xFF16A34A) : Colors.white;
+          final markerColor = isCheapest ? AppColors.goStrong : Colors.white;
           final borderColor = isCheapest
-              ? const Color(0xFF16A34A)
+              ? AppColors.goStrong
               : accent.withValues(alpha: 0.25);
           final textColor = isCheapest ? Colors.white : const Color(0xFF18181B);
           return Marker(
@@ -552,7 +584,7 @@ class _DashboardViewState extends State<DashboardView> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF16A34A),
+                        color: AppColors.goStrong,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
@@ -560,7 +592,7 @@ class _DashboardViewState extends State<DashboardView> {
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 9,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 0.8,
                         ),
                       ),
@@ -604,7 +636,7 @@ class _DashboardViewState extends State<DashboardView> {
                           style: TextStyle(
                             color: textColor,
                             fontSize: 13,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: -0.3,
                           ),
                         ),
@@ -634,7 +666,8 @@ class _DashboardViewState extends State<DashboardView> {
             maxZoom: 18,
             // Disable rotation — pinch only zooms
             interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.pinchZoom |
+              flags:
+                  InteractiveFlag.pinchZoom |
                   InteractiveFlag.drag |
                   InteractiveFlag.flingAnimation |
                   InteractiveFlag.doubleTapZoom,
@@ -659,10 +692,12 @@ class _DashboardViewState extends State<DashboardView> {
                   child: Icon(Icons.circle, color: Colors.white, size: 12),
                 ),
                 markerSize: const Size.square(24),
-                accuracyCircleColor:
-                    const Color(0xFF2563EB).withValues(alpha: 0.08),
-                headingSectorColor:
-                    const Color(0xFF2563EB).withValues(alpha: 0.30),
+                accuracyCircleColor: const Color(
+                  0xFF2563EB,
+                ).withValues(alpha: 0.08),
+                headingSectorColor: const Color(
+                  0xFF2563EB,
+                ).withValues(alpha: 0.30),
               ),
             ),
             Consumer<TripViewModel>(
@@ -717,7 +752,7 @@ class _DashboardViewState extends State<DashboardView> {
       placeholder: 'Search station, brand, area',
       placeholderStyle: TextStyle(
         fontFamily: AppTheme.fontFamily,
-        color: const Color(0xFF94A3B8),
+        color: AppColors.textMuted,
       ),
       style: TextStyle(
         fontFamily: AppTheme.fontFamily,
@@ -730,7 +765,7 @@ class _DashboardViewState extends State<DashboardView> {
       ),
       prefix: const Padding(
         padding: EdgeInsets.symmetric(horizontal: 12),
-        child: Icon(Icons.search, color: Color(0xFF64748B)),
+        child: Icon(Icons.search, color: AppColors.textMuted),
       ),
       suffix: _searchController.text.isNotEmpty
           ? AppIconButton(
@@ -738,7 +773,7 @@ class _DashboardViewState extends State<DashboardView> {
                 _searchController.clear();
                 FocusScope.of(context).unfocus();
               },
-              icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+              icon: const Icon(Icons.close, color: AppColors.textMuted),
               tooltip: 'Clear',
             )
           : null,
@@ -747,12 +782,6 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   Widget _buildCupertinoTabBar(ColorScheme scheme) {
-    const items = [
-      (Icons.home_outlined, Icons.home, 'Home'),
-      (Icons.map_outlined, Icons.map, 'Map'),
-      (Icons.add_a_photo_outlined, Icons.add_a_photo, 'Report'),
-      (Icons.person_outline, Icons.person, 'Profile'),
-    ];
     return CupertinoTabBar(
       currentIndex: _selectedIndex,
       onTap: _onItemTapped,
@@ -761,11 +790,11 @@ class _DashboardViewState extends State<DashboardView> {
       activeColor: scheme.primary,
       inactiveColor: scheme.onSurfaceVariant,
       items: [
-        for (final (icon, activeIcon, label) in items)
+        for (final tab in _tabs)
           BottomNavigationBarItem(
-            icon: Icon(icon),
-            activeIcon: Icon(activeIcon),
-            label: label,
+            icon: Icon(tab.icon),
+            activeIcon: Icon(tab.selectedIcon),
+            label: tab.label,
           ),
       ],
     );
@@ -774,6 +803,7 @@ class _DashboardViewState extends State<DashboardView> {
   Widget _buildIconButton({
     required BuildContext context,
     required IconData icon,
+    required String tooltip,
     required VoidCallback onPressed,
   }) {
     final scheme = Theme.of(context).colorScheme;
@@ -794,34 +824,7 @@ class _DashboardViewState extends State<DashboardView> {
       ),
       child: AppIconButton(
         icon: Icon(icon, color: scheme.primary),
-        onPressed: onPressed,
-      ),
-    );
-  }
-
-  Widget _buildFloatingButton({
-    required IconData icon,
-    required Color bgColor,
-    required Color iconColor,
-    required VoidCallback onPressed,
-  }) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: bgColor,
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0x0A000000)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 16,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: AppIconButton(
-        icon: Icon(icon, size: 20, color: iconColor),
+        tooltip: tooltip,
         onPressed: onPressed,
       ),
     );
@@ -860,8 +863,7 @@ class _TrianglePainter extends CustomPainter {
 }
 
 class _FuelChips extends StatelessWidget {
-  final VoidCallback onMapTap;
-  const _FuelChips({required this.onMapTap});
+  const _FuelChips();
 
   @override
   Widget build(BuildContext context) {
@@ -910,16 +912,6 @@ class _FuelChips extends StatelessWidget {
                 backgroundColor: Colors.white.withValues(alpha: 0.96),
                 labelStyle: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(width: 12),
-              ActionChip(
-                label: const Text('Focus map'),
-                onPressed: onMapTap,
-                backgroundColor: scheme.surfaceContainerHighest,
-                labelStyle: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: scheme.primary,
-                ),
-              ),
             ],
           ),
         );
@@ -947,14 +939,21 @@ class _StationsSheet extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return DraggableScrollableSheet(
       controller: controller,
-      initialChildSize: 0.42,
-      minChildSize: 0.14,
-      maxChildSize: 0.78,
+      initialChildSize: _sheetHalf,
+      minChildSize: _sheetPeek,
+      maxChildSize: _sheetFull,
       snap: true,
-      snapSizes: const [0.14, 0.42, 0.78],
+      snapSizes: const [_sheetPeek, _sheetHalf, _sheetFull],
       builder: (context, scrollController) {
         return Container(
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 88),
+          // extendBody makes the body's bottom padding equal the floating
+          // nav bar's height (plus the gesture inset), so clear exactly that.
+          margin: EdgeInsets.fromLTRB(
+            12,
+            0,
+            12,
+            MediaQuery.paddingOf(context).bottom + 8,
+          ),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.97),
             borderRadius: BorderRadius.circular(28),
@@ -983,14 +982,16 @@ class _StationsSheet extends StatelessWidget {
                 child: Consumer<DashboardViewModel>(
                   builder: (context, vm, _) {
                     if (vm.isLoading) {
-                      return _buildSheetHeader(context, scrollController,
-                        child: const Center(
-                          child: AppSpinner(strokeWidth: 2),
-                        ),
+                      return _buildSheetHeader(
+                        context,
+                        scrollController,
+                        child: const Center(child: AppSpinner(strokeWidth: 2)),
                       );
                     }
                     if (vm.errorMessage != null) {
-                      return _buildSheetHeader(context, scrollController,
+                      return _buildSheetHeader(
+                        context,
+                        scrollController,
                         child: AppEmptyState(
                           title: "Can't load stations",
                           subtitle: vm.errorMessage!,
@@ -1001,7 +1002,9 @@ class _StationsSheet extends StatelessWidget {
                     }
                     final stations = vm.visibleStations;
                     if (stations.isEmpty) {
-                      return _buildSheetHeader(context, scrollController,
+                      return _buildSheetHeader(
+                        context,
+                        scrollController,
                         child: AppEmptyState(
                           title: 'No stations found',
                           subtitle: vm.onlyWithPrices
@@ -1030,7 +1033,7 @@ class _StationsSheet extends StatelessWidget {
                                     'Nearby stations',
                                     style: TextStyle(
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w700,
                                       letterSpacing: -0.3,
                                     ),
                                   ),
@@ -1076,11 +1079,9 @@ class _StationsSheet extends StatelessWidget {
                           if (dist < 100) {
                             distLabel = '${dist.round()}m';
                           } else if (dist < 1000) {
-                            distLabel =
-                                '${(dist / 10).round() * 10}m';
+                            distLabel = '${(dist / 10).round() * 10}m';
                           } else {
-                            distLabel =
-                                '${(dist / 1000).toStringAsFixed(1)}km';
+                            distLabel = '${(dist / 1000).toStringAsFixed(1)}km';
                           }
                         }
 
@@ -1091,14 +1092,12 @@ class _StationsSheet extends StatelessWidget {
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: isCheapest
-                                  ? const Color(0xFF16A34A)
-                                      .withValues(alpha: 0.06)
+                                  ? AppColors.goStrong.withValues(alpha: 0.06)
                                   : scheme.surface,
                               borderRadius: BorderRadius.circular(22),
                               border: Border.all(
                                 color: isCheapest
-                                    ? const Color(0xFF16A34A)
-                                        .withValues(alpha: 0.30)
+                                    ? AppColors.goStrong.withValues(alpha: 0.30)
                                     : const Color(0x0A000000),
                                 width: isCheapest ? 1.5 : 1,
                               ),
@@ -1108,24 +1107,22 @@ class _StationsSheet extends StatelessWidget {
                               children: [
                                 if (isCheapest)
                                   Padding(
-                                    padding:
-                                        const EdgeInsets.only(bottom: 10),
+                                    padding: const EdgeInsets.only(bottom: 10),
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 10,
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF16A34A),
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                                        color: AppColors.goStrong,
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: const Text(
                                         'CHEAPEST NEARBY',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 10,
-                                          fontWeight: FontWeight.w900,
+                                          fontWeight: FontWeight.w700,
                                           letterSpacing: 0.8,
                                         ),
                                       ),
@@ -1138,18 +1135,17 @@ class _StationsSheet extends StatelessWidget {
                                       height: 46,
                                       decoration: BoxDecoration(
                                         color: isCheapest
-                                            ? const Color(0xFF16A34A)
-                                                .withValues(alpha: 0.14)
-                                            : accent
-                                                .withValues(alpha: 0.14),
-                                        borderRadius:
-                                            BorderRadius.circular(16),
+                                            ? AppColors.goStrong.withValues(
+                                                alpha: 0.14,
+                                              )
+                                            : accent.withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(16),
                                         border: Border.all(
                                           color: isCheapest
-                                              ? const Color(0xFF16A34A)
-                                                  .withValues(alpha: 0.30)
-                                              : accent.withValues(
-                                                  alpha: 0.22),
+                                              ? AppColors.goStrong.withValues(
+                                                  alpha: 0.30,
+                                                )
+                                              : accent.withValues(alpha: 0.22),
                                         ),
                                       ),
                                       child: brandLogoWidget(s.brand, 24),
@@ -1169,41 +1165,40 @@ class _StationsSheet extends StatelessWidget {
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                   style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w900,
+                                                    fontWeight: FontWeight.w700,
                                                     letterSpacing: -0.2,
                                                   ),
                                                 ),
                                               ),
                                               const SizedBox(width: 10),
                                               Container(
-                                                padding: const EdgeInsets
-                                                    .symmetric(
-                                                  horizontal: 10,
-                                                  vertical: 6,
-                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 6,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: isCheapest
-                                                      ? const Color(
-                                                              0xFF16A34A)
-                                                          .withValues(
-                                                              alpha: 0.12)
+                                                      ? AppColors.goStrong
+                                                            .withValues(
+                                                              alpha: 0.12,
+                                                            )
                                                       : scheme.primary
-                                                          .withValues(
-                                                              alpha: 0.06),
+                                                            .withValues(
+                                                              alpha: 0.06,
+                                                            ),
                                                   borderRadius:
                                                       BorderRadius.circular(
-                                                          999),
+                                                        999,
+                                                      ),
                                                 ),
                                                 child: Text(
                                                   '$fuelLabel \u2022 ${formatPricePerLiter(price)}',
                                                   style: TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w900,
+                                                    fontWeight: FontWeight.w700,
                                                     fontSize: 12,
                                                     color: isCheapest
-                                                        ? const Color(
-                                                            0xFF16A34A)
+                                                        ? AppColors.goStrong
                                                         : scheme.primary,
                                                   ),
                                                 ),
@@ -1214,13 +1209,13 @@ class _StationsSheet extends StatelessWidget {
                                           Text(
                                             s.address.isEmpty
                                                 ? (s.brand.isEmpty
-                                                    ? '\u2014'
-                                                    : s.brand)
+                                                      ? '\u2014'
+                                                      : s.brand)
                                                 : s.address,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
-                                              color: Color(0xFF64748B),
+                                              color: AppColors.textMuted,
                                               fontWeight: FontWeight.w600,
                                               fontSize: 12,
                                             ),
@@ -1229,25 +1224,25 @@ class _StationsSheet extends StatelessWidget {
                                           Row(
                                             children: [
                                               Container(
-                                                padding: const EdgeInsets
-                                                    .symmetric(
-                                                  horizontal: 10,
-                                                  vertical: 6,
-                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 6,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: scheme
                                                       .surfaceContainerHighest,
                                                   borderRadius:
                                                       BorderRadius.circular(
-                                                          999),
+                                                        999,
+                                                      ),
                                                 ),
                                                 child: Text(
                                                   s.brand.isEmpty
                                                       ? 'Station'
                                                       : s.brand,
                                                   style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w800,
+                                                    fontWeight: FontWeight.w700,
                                                     fontSize: 11,
                                                   ),
                                                 ),
@@ -1255,43 +1250,41 @@ class _StationsSheet extends StatelessWidget {
                                               if (distLabel != null) ...[
                                                 const SizedBox(width: 8),
                                                 Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 6,
-                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 6,
+                                                      ),
                                                   decoration: BoxDecoration(
                                                     color: const Color(
-                                                            0xFF2563EB)
-                                                        .withValues(
-                                                            alpha: 0.08),
+                                                      0xFF2563EB,
+                                                    ).withValues(alpha: 0.08),
                                                     borderRadius:
-                                                        BorderRadius
-                                                            .circular(999),
+                                                        BorderRadius.circular(
+                                                          999,
+                                                        ),
                                                   ),
                                                   child: Row(
                                                     mainAxisSize:
                                                         MainAxisSize.min,
                                                     children: [
                                                       const Icon(
-                                                        Icons
-                                                            .near_me_outlined,
+                                                        Icons.near_me_outlined,
                                                         size: 11,
                                                         color: Color(
-                                                            0xFF2563EB),
+                                                          0xFF2563EB,
+                                                        ),
                                                       ),
-                                                      const SizedBox(
-                                                          width: 3),
+                                                      const SizedBox(width: 3),
                                                       Text(
                                                         distLabel,
-                                                        style:
-                                                            const TextStyle(
+                                                        style: const TextStyle(
                                                           fontWeight:
-                                                              FontWeight
-                                                                  .w800,
+                                                              FontWeight.w800,
                                                           fontSize: 11,
                                                           color: Color(
-                                                              0xFF2563EB),
+                                                            0xFF2563EB,
+                                                          ),
                                                         ),
                                                       ),
                                                     ],
@@ -1307,10 +1300,8 @@ class _StationsSheet extends StatelessWidget {
                                                       TextOverflow.ellipsis,
                                                   style: const TextStyle(
                                                     fontSize: 11,
-                                                    fontWeight:
-                                                        FontWeight.w700,
-                                                    color:
-                                                        Color(0xFF94A3B8),
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppColors.textMuted,
                                                   ),
                                                 ),
                                               ),
@@ -1355,7 +1346,7 @@ class _StationsSheet extends StatelessWidget {
                     'Nearby stations',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: -0.3,
                     ),
                   ),

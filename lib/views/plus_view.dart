@@ -8,7 +8,7 @@ import '../ui/adaptive/app_platform.dart';
 class PlusView extends StatelessWidget {
   const PlusView({super.key});
 
-  static const _green = Color(0xFF22C55E);
+  static const _green = AppColors.goStrong;
   static const _charcoal = Color(0xFF111827);
 
   @override
@@ -20,6 +20,7 @@ class PlusView extends StatelessWidget {
               title: 'GASOLINAHAN PLUS',
               leading: AppCircleButton(
                 icon: Icons.arrow_back,
+                tooltip: 'Back',
                 iconSize: 20,
                 onPressed: () => Navigator.pop(context),
               ),
@@ -27,10 +28,12 @@ class PlusView extends StatelessWidget {
           : AppBar(
               backgroundColor: const Color(0xFFF4F6F9),
               elevation: 0,
+              leadingWidth: 64,
               leading: Padding(
                 padding: const EdgeInsets.only(left: 16),
                 child: AppCircleButton(
                   icon: Icons.arrow_back,
+                  tooltip: 'Back',
                   iconSize: 20,
                   onPressed: () => Navigator.pop(context),
                 ),
@@ -41,7 +44,7 @@ class PlusView extends StatelessWidget {
                 style: TextStyle(
                   color: Colors.black,
                   fontSize: 16,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -68,7 +71,7 @@ class PlusView extends StatelessWidget {
               'Upgrade to Plus',
               style: TextStyle(
                 fontSize: 24,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
                 color: _charcoal,
               ),
             ),
@@ -78,7 +81,7 @@ class PlusView extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: Color(0xFF64748B),
+                color: AppColors.textMuted,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -164,7 +167,7 @@ class PlusView extends StatelessWidget {
                 title,
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 0.5,
                   color: _charcoal,
                 ),
@@ -200,7 +203,7 @@ class PlusView extends StatelessWidget {
                 price,
                 style: const TextStyle(
                   fontSize: 32,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: _charcoal,
                 ),
               ),
@@ -211,7 +214,7 @@ class PlusView extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF64748B),
+                    color: AppColors.textMuted,
                   ),
                 ),
               ),
@@ -226,7 +229,7 @@ class PlusView extends StatelessWidget {
                   Icon(
                     Icons.check_circle_rounded,
                     size: 18,
-                    color: isHighlighted ? accentColor : Colors.grey,
+                    color: isHighlighted ? accentColor : AppColors.textMuted,
                   ),
                   const SizedBox(width: 10),
                   Text(
@@ -273,7 +276,7 @@ class _SubscribeButton extends StatelessWidget {
           style: TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontSize: 15,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             color: Colors.white,
           ),
         ),
@@ -290,7 +293,7 @@ class _SubscribeButton extends StatelessWidget {
       ),
       child: const Text(
         'Subscribe',
-        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
       ),
     );
   }

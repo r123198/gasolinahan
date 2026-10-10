@@ -7,6 +7,7 @@ import '../components/app_circle_button.dart';
 import 'camera_overlay_view.dart';
 import 'report_onboarding_view.dart';
 import '../ui/adaptive/app_page_route.dart';
+import '../ui/app_theme.dart';
 
 const _kOnboardingKey = 'report_onboarding_seen';
 
@@ -76,11 +77,10 @@ class _ReportViewState extends State<ReportView>
 
   Future<void> _markOnboardingSeen() async {
     final db = await _openPrefsDb();
-    await db.insert(
-      'prefs',
-      {'key': _kOnboardingKey, 'value': '1'},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('prefs', {
+      'key': _kOnboardingKey,
+      'value': '1',
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
     await db.close();
   }
 
@@ -154,13 +154,13 @@ class _ReportViewState extends State<ReportView>
         child: Column(
           children: [
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   AppCircleButton(
                     icon: Icons.arrow_back_ios_new,
+                    tooltip: 'Back',
                     onPressed: () {
                       context.read<ReportViewModel>().reset();
                       Navigator.pop(context);
@@ -179,6 +179,7 @@ class _ReportViewState extends State<ReportView>
                   ),
                   AppCircleButton(
                     icon: Icons.help_outline,
+                    tooltip: 'How reporting works',
                     onPressed: () async {
                       await _showOnboarding();
                     },
@@ -242,8 +243,7 @@ class _ReportViewState extends State<ReportView>
                 height: 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFFBF94FF)
-                      .withValues(alpha: opacity * 0.15),
+                  color: AppColors.accent.withValues(alpha: opacity * 0.15),
                 ),
                 child: Center(
                   child: Container(
@@ -251,8 +251,7 @@ class _ReportViewState extends State<ReportView>
                     height: 80,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: const Color(0xFFBF94FF)
-                          .withValues(alpha: opacity * 0.30),
+                      color: AppColors.accent.withValues(alpha: opacity * 0.30),
                     ),
                     child: Icon(
                       icon,
@@ -270,7 +269,7 @@ class _ReportViewState extends State<ReportView>
           title,
           style: const TextStyle(
             fontSize: 24,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w700,
             color: Colors.white,
             letterSpacing: -0.5,
           ),
@@ -290,7 +289,7 @@ class _ReportViewState extends State<ReportView>
           child: LinearProgressIndicator(
             borderRadius: BorderRadius.circular(4),
             backgroundColor: Colors.white.withValues(alpha: 0.10),
-            valueColor: const AlwaysStoppedAnimation(Color(0xFFBF94FF)),
+            valueColor: const AlwaysStoppedAnimation(AppColors.accent),
           ),
         ),
         if (vm.errorMessage != null) ...[

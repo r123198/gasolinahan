@@ -32,7 +32,8 @@ class DeviceLocationSource implements LocationSource {
     if (permission == PermissionStatus.denied) {
       permission = await _location.requestPermission();
     }
-    final allowed = permission == PermissionStatus.granted ||
+    final allowed =
+        permission == PermissionStatus.granted ||
         permission == PermissionStatus.grantedLimited;
     if (!allowed) return false;
 

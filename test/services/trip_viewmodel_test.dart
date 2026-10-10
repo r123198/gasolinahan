@@ -68,24 +68,24 @@ class FakeService extends TripService {
 
   @override
   Future<List<Trip>> getAll() async => [
-        for (final t in finished)
-          Trip(
-            id: 1,
-            startedAt: t.startedAt,
-            endedAt: t.endedAt,
-            distanceMeters: t.distanceMeters,
-          ),
-      ];
+    for (final t in finished)
+      Trip(
+        id: 1,
+        startedAt: t.startedAt,
+        endedAt: t.endedAt,
+        distanceMeters: t.distanceMeters,
+      ),
+  ];
 }
 
 final _t0 = DateTime(2026, 1, 1, 8);
 TripPoint pt(int s, double meters, {double speed = 12}) => TripPoint(
-      latitude: 14.5 + meters / 111195.0,
-      longitude: 121.0,
-      timestamp: _t0.add(Duration(seconds: s)),
-      speedMps: speed,
-      accuracyMeters: 5,
-    );
+  latitude: 14.5 + meters / 111195.0,
+  longitude: 121.0,
+  timestamp: _t0.add(Duration(seconds: s)),
+  speedMps: speed,
+  accuracyMeters: 5,
+);
 
 Future<void> settle() => Future<void>.delayed(Duration.zero);
 
@@ -103,6 +103,17 @@ void main() {
   });
 
   tearDown(() => vm.dispose());
+
+  test('shares every location sample with other features', () async {
+    await vm.startMonitoring();
+    final received = <TripPoint>[];
+    final sub = vm.locationUpdates.listen(received.add);
+    source.controller.add(pt(0, 0, speed: 0));
+    source.controller.add(pt(5, 10, speed: 2));
+    await settle();
+    expect(received, hasLength(2));
+    await sub.cancel();
+  });
 
   test('reports permission denied and does not monitor', () async {
     source.allowed = false;
@@ -159,9 +170,7 @@ void main() {
   });
 
   test('finishes a trip interrupted by a crash on the next launch', () async {
-    service.active[7] = [
-      for (var i = 0; i <= 10; i++) pt(i * 10, 100.0 * i),
-    ];
+    service.active[7] = [for (var i = 0; i <= 10; i++) pt(i * 10, 100.0 * i)];
     await vm.startMonitoring();
     expect(service.active, isEmpty);
     expect(service.finished, hasLength(1));
@@ -182,15 +191,17 @@ void main() {
     expect(source.precise.last, isTrue);
   });
 
-  test('goes back to sparing mode when you are no longer in a vehicle',
-      () async {
-    await vm.startMonitoring();
-    activity.controller.add(true);
-    await settle();
-    activity.controller.add(false);
-    await settle();
-    expect(source.precise.last, isFalse);
-  });
+  test(
+    'goes back to sparing mode when you are no longer in a vehicle',
+    () async {
+      await vm.startMonitoring();
+      activity.controller.add(true);
+      await settle();
+      activity.controller.add(false);
+      await settle();
+      expect(source.precise.last, isFalse);
+    },
+  );
 
   test('the hint lets a trip start within 20 seconds of driving', () async {
     await vm.startMonitoring();
@@ -209,14 +220,16 @@ void main() {
     expect(vm.isMonitoring, isTrue);
   });
 
-  test('Track me starts on the next sample when none has arrived yet',
-      () async {
-    await vm.trackNow();
-    expect(vm.isTracking, isTrue);
-    source.controller.add(pt(0, 0, speed: 0));
-    await settle();
-    expect(vm.isTracking, isTrue);
-  });
+  test(
+    'Track me starts on the next sample when none has arrived yet',
+    () async {
+      await vm.trackNow();
+      expect(vm.isTracking, isTrue);
+      source.controller.add(pt(0, 0, speed: 0));
+      await settle();
+      expect(vm.isTracking, isTrue);
+    },
+  );
 
   test('Track me then stop saves a meaningful trip', () async {
     await vm.startMonitoring();

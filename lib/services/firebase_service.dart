@@ -52,6 +52,34 @@ class FirebaseService {
     await _auth.signOut();
   }
 
+  Future<void> sendPasswordReset(String email) =>
+      _auth.sendPasswordResetEmail(email: email.trim());
+
+  /// Updates the name on both the auth account and the Firestore profile.
+  Future<void> updateName(String userId, String name) async {
+    await _auth.currentUser?.updateDisplayName(name);
+    await _firestore.collection('users').doc(userId).update({'name': name});
+  }
+
+  /// Firebase requires a recent sign-in before a password change, so the
+  /// current password is checked first.
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) {
+      throw FirebaseAuthException(code: 'user-not-found');
+    }
+    final credential = EmailAuthProvider.credential(
+      email: email,
+      password: currentPassword,
+    );
+    await user.reauthenticateWithCredential(credential);
+    await user.updatePassword(newPassword);
+  }
+
   Future<UserModel> _getOrCreateUserDoc(User authUser) async {
     final doc = await _firestore.collection('users').doc(authUser.uid).get();
 
@@ -105,9 +133,11 @@ class FirebaseService {
         .orderBy('lastUpdated', descending: true)
         .limit(50)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => StationModel.fromMap(doc.data(), doc.id))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => StationModel.fromMap(doc.data(), doc.id))
+              .toList(),
+        );
   }
 
   Future<StationModel?> getStation(String stationId) async {
@@ -175,17 +205,19 @@ class FirebaseService {
 
   // ── Reports ─────────────────────────────────────────
 
-  Future<List<ReportModel>> getUserReports(String userId, {int limit = 20}) async {
+  Future<List<ReportModel>> getUserReports(
+    String userId, {
+    int limit = 20,
+  }) async {
     // Filter-only query: avoids the userId+timestamp composite index.
     // Sorting and limiting happen client-side; a user's reports are few.
     final snap = await _firestore
         .collection('reports')
         .where('userId', isEqualTo: userId)
         .get();
-    final reports = snap.docs
-        .map((doc) => ReportModel.fromMap(doc.data(), doc.id))
-        .toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final reports =
+        snap.docs.map((doc) => ReportModel.fromMap(doc.data(), doc.id)).toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return List.unmodifiable(reports.take(limit));
   }
 

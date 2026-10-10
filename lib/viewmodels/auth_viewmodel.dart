@@ -16,11 +16,17 @@ class AuthViewModel extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _currentUser != null;
 
+  /// Never throws: a failed lookup (e.g. offline) leaves the user signed
+  /// out so the splash screen can always move on.
   Future<void> checkAuthState() async {
-    final user = await _firebaseService.getCurrentUser();
-    if (user != null) {
-      _currentUser = user;
-      notifyListeners();
+    try {
+      final user = await _firebaseService.getCurrentUser();
+      if (user != null) {
+        _currentUser = user;
+        notifyListeners();
+      }
+    } on Exception catch (e) {
+      debugPrint('checkAuthState failed: $e');
     }
   }
 
@@ -93,9 +99,48 @@ class AuthViewModel extends ChangeNotifier {
 
   Future<void> signOut() async {
     _setLoading(true);
-    await _firebaseService.signOut();
-    _currentUser = null;
-    _setLoading(false);
+    try {
+      await _firebaseService.signOut();
+      _currentUser = null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Returns null on success, or a message to show the user.
+  Future<String?> sendPasswordReset(String email) =>
+      _runAccountAction(() => _firebaseService.sendPasswordReset(email));
+
+  Future<String?> updateName(String name) async {
+    final user = _currentUser;
+    if (user == null) return 'You are signed out. Sign in again.';
+    final trimmed = name.trim();
+    final error = await _runAccountAction(
+      () => _firebaseService.updateName(user.id, trimmed),
+    );
+    if (error == null) {
+      _currentUser = user.copyWith(name: trimmed);
+      notifyListeners();
+    }
+    return error;
+  }
+
+  Future<String?> changePassword(String current, String next) =>
+      _runAccountAction(() => _firebaseService.changePassword(current, next));
+
+  Future<String?> _runAccountAction(Future<void> Function() action) async {
+    _setLoading(true);
+    try {
+      await action();
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _mapAuthError(e.code);
+    } on FirebaseException catch (e) {
+      debugPrint('Account action failed: ${e.code} ${e.message}');
+      return 'Could not save. Check your connection and try again.';
+    } finally {
+      _setLoading(false);
+    }
   }
 
   void _setLoading(bool value) {
@@ -116,7 +161,8 @@ class AuthViewModel extends ChangeNotifier {
       'wrong-password' => 'Incorrect password.',
       'invalid-credential' => 'Invalid email or password.',
       'email-already-in-use' => 'An account with this email already exists.',
-      'weak-password' => 'Password must be at least 6 characters.',
+      'weak-password' => 'Choose a stronger password.',
+      'requires-recent-login' => 'Please sign out and sign in again first.',
       'invalid-email' => 'Please enter a valid email address.',
       'too-many-requests' => 'Too many attempts. Please try again later.',
       'network-request-failed' => 'No internet connection.',

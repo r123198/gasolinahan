@@ -4,6 +4,7 @@ import '../viewmodels/report_viewmodel.dart';
 import '../components/app_primary_button.dart';
 import '../components/app_list_tile.dart';
 import '../ui/app_format.dart';
+import '../ui/app_theme.dart';
 
 class SuccessView extends StatelessWidget {
   const SuccessView({super.key});
@@ -17,8 +18,9 @@ class SuccessView extends StatelessWidget {
     final fuelType = vm.regularPrice > 0
         ? 'Regular'
         : (vm.premiumPrice > 0 ? 'Premium' : 'Diesel');
-    final stationLabel =
-        vm.stationName.isNotEmpty ? vm.stationName : 'Unknown Station';
+    final stationLabel = vm.stationName.isNotEmpty
+        ? vm.stationName
+        : 'Unknown Station';
     final brandLabel = vm.brand.isNotEmpty ? vm.brand : '';
 
     return Scaffold(
@@ -42,7 +44,7 @@ class SuccessView extends StatelessWidget {
                       vm.savedOffline ? 'Saved Offline' : 'Report Received',
                       style: const TextStyle(
                         fontSize: 32,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: -1,
                       ),
                     ),
@@ -53,7 +55,7 @@ class SuccessView extends StatelessWidget {
                           : 'Thanks for helping update prices.',
                       style: TextStyle(
                         fontSize: 16,
-                        color: Colors.grey.shade600,
+                        color: AppColors.textMuted,
                       ),
                     ),
                     const SizedBox(height: 48),
@@ -87,7 +89,7 @@ class SuccessView extends StatelessWidget {
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 1,
-                                      color: Colors.grey.shade500,
+                                      color: AppColors.textMuted,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -109,7 +111,7 @@ class SuccessView extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade500,
+                                          color: AppColors.textMuted,
                                         ),
                                       ),
                                     ],
@@ -137,10 +139,7 @@ class SuccessView extends StatelessWidget {
                                 ? '$stationLabel ($brandLabel)'
                                 : stationLabel,
                           ),
-                          AppDetailRow(
-                            icon: Icons.category,
-                            text: fuelType,
-                          ),
+                          AppDetailRow(icon: Icons.category, text: fuelType),
                           const AppDetailRow(
                             icon: Icons.schedule,
                             text: 'Just now',

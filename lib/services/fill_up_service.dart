@@ -16,6 +16,13 @@ class FillUpService {
     return db.insert(_table, fillUp.toMap());
   }
 
+  Future<void> update(FillUp fillUp) async {
+    final id = fillUp.id;
+    if (id == null) throw ArgumentError('Only saved fill-ups can be updated');
+    final db = await OfflineDatabaseService.database;
+    await db.update(_table, fillUp.toMap(), where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<void> delete(int id) async {
     final db = await OfflineDatabaseService.database;
     await db.delete(_table, where: 'id = ?', whereArgs: [id]);

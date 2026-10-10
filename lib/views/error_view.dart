@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../viewmodels/report_viewmodel.dart';
 import '../components/app_primary_button.dart';
 import '../ui/adaptive/app_icon_button.dart';
+import '../ui/app_theme.dart';
 
 class ErrorView extends StatelessWidget {
   const ErrorView({super.key});
@@ -109,11 +110,7 @@ class ErrorView extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                       child: Center(
-                        child: Icon(
-                          icon,
-                          size: 56,
-                          color: Colors.red.shade400,
-                        ),
+                        child: Icon(icon, size: 56, color: Colors.red.shade400),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -122,7 +119,7 @@ class ErrorView extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 28,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: -0.5,
                       ),
                     ),
@@ -133,7 +130,7 @@ class ErrorView extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
+                        color: AppColors.textMuted,
                         height: 1.5,
                       ),
                     ),

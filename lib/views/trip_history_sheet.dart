@@ -3,10 +3,13 @@ import 'package:provider/provider.dart';
 import 'auto_tracking_guide_view.dart';
 import '../models/fuel_insights.dart';
 import '../models/trip_model.dart';
+import '../ui/adaptive/app_dialog.dart';
 import '../ui/adaptive/app_sheet.dart';
+import '../ui/adaptive/app_toast.dart';
 import '../ui/tracker_format.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
+import '../ui/app_theme.dart';
 
 Future<void> showTripHistory(BuildContext context) {
   return showAppSheet<void>(
@@ -18,6 +21,27 @@ Future<void> showTripHistory(BuildContext context) {
 
 class _TripHistory extends StatelessWidget {
   const _TripHistory();
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    TripViewModel vm,
+    Trip trip,
+  ) async {
+    final confirmed = await showAppConfirmDialog(
+      context: context,
+      title: 'Delete this trip?',
+      message: 'Its distance will be removed from your totals.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
+    );
+    if (!confirmed || !context.mounted) return;
+    await vm.deleteTrip(trip);
+    // errorMessage may be left over from tracking, so check the list itself.
+    final stillThere = vm.history.any((t) => t.id == trip.id);
+    if (stillThere && context.mounted) {
+      showAppToast(context, "Couldn't delete this trip. Try again.");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +64,7 @@ class _TripHistory extends StatelessWidget {
                   'Your trips',
                   style: TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -52,7 +76,7 @@ class _TripHistory extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF64748B),
+                    color: AppColors.textMuted,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -65,7 +89,10 @@ class _TripHistory extends StatelessWidget {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.directions_car_filled_outlined, size: 18),
+                  icon: const Icon(
+                    Icons.directions_car_filled_outlined,
+                    size: 18,
+                  ),
                   label: const Text('Start tracking automatically in my car'),
                 ),
                 const SizedBox(height: 4),
@@ -78,7 +105,7 @@ class _TripHistory extends StatelessWidget {
                     itemBuilder: (_, i) => _TripRow(
                       trip: trips[i],
                       costPerKm: costPerKm,
-                      onDelete: () => vm.deleteTrip(trips[i]),
+                      onDelete: () => _confirmDelete(context, vm, trips[i]),
                     ),
                   ),
                 ),
@@ -122,7 +149,7 @@ class _TripRow extends StatelessWidget {
                       : '${formatKmShort(trip.distanceKm)} · ~${formatPesos(trip.distanceKm * costPerKm!)}',
                   style: const TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -131,7 +158,7 @@ class _TripRow extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF94A3B8),
+                    color: AppColors.textMuted,
                   ),
                 ),
               ],
@@ -140,8 +167,10 @@ class _TripRow extends StatelessWidget {
           IconButton(
             tooltip: 'Delete trip',
             onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: Color(0xFF94A3B8)),
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppColors.textMuted,
+            ),
           ),
         ],
       ),

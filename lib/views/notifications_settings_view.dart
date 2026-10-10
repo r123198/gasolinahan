@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../components/app_circle_button.dart';
 import '../ui/adaptive/app_nav_bar.dart';
 import '../ui/adaptive/app_platform.dart';
+import '../ui/app_theme.dart';
 
 class NotificationsSettingsView extends StatefulWidget {
   const NotificationsSettingsView({super.key});
@@ -28,6 +29,7 @@ class _NotificationsSettingsViewState extends State<NotificationsSettingsView> {
               title: 'Notifications',
               leading: AppCircleButton(
                 icon: Icons.arrow_back,
+                tooltip: 'Back',
                 iconSize: 20,
                 onPressed: () => Navigator.pop(context),
               ),
@@ -35,10 +37,12 @@ class _NotificationsSettingsViewState extends State<NotificationsSettingsView> {
           : AppBar(
               backgroundColor: const Color(0xFFF4F6F9),
               elevation: 0,
+              leadingWidth: 64,
               leading: Padding(
                 padding: const EdgeInsets.only(left: 16),
                 child: AppCircleButton(
                   icon: Icons.arrow_back,
+                  tooltip: 'Back',
                   iconSize: 20,
                   onPressed: () => Navigator.pop(context),
                 ),
@@ -49,7 +53,7 @@ class _NotificationsSettingsViewState extends State<NotificationsSettingsView> {
                 style: TextStyle(
                   color: Colors.black,
                   fontSize: 16,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -155,7 +159,7 @@ class _NotificationsSettingsViewState extends State<NotificationsSettingsView> {
                   subtitle,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF64748B),
+                    color: AppColors.textMuted,
                   ),
                 ),
               ],

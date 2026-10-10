@@ -228,7 +228,8 @@ class ReportViewModel extends ChangeNotifier {
 
       if (exifData.isNotEmpty) {
         // Screenshots typically lack Make/Model EXIF tags
-        final hasCamera = exifData.containsKey('Image Make') ||
+        final hasCamera =
+            exifData.containsKey('Image Make') ||
             exifData.containsKey('Image Model') ||
             exifData.containsKey('EXIF FocalLength') ||
             exifData.containsKey('EXIF ExposureTime');
@@ -374,7 +375,13 @@ class ReportViewModel extends ChangeNotifier {
     // Build keyword lists — brand-specific product names + generic fallbacks
     final regularKw = <String>['regular', 'unleaded', '87', 'ron 91'];
     final premiumKw = <String>[
-      'premium', 'super', '93', '95', '97', 'ron 95', 'ron 97',
+      'premium',
+      'super',
+      '93',
+      '95',
+      '97',
+      'ron 95',
+      'ron 97',
     ];
     final dieselKw = <String>['diesel', 'dsl'];
 
@@ -390,8 +397,7 @@ class ReportViewModel extends ChangeNotifier {
         target.add(name);
         // Also add individual significant words
         for (final word in name.split(' ')) {
-          if (word.length > 2 &&
-              !const {'euro', 'per', 'new'}.contains(word)) {
+          if (word.length > 2 && !const {'euro', 'per', 'new'}.contains(word)) {
             target.add(word);
           }
         }
@@ -494,8 +500,12 @@ class ReportViewModel extends ChangeNotifier {
       _stationDistances = {};
       for (final s in allStations) {
         if (s.latitude != 0 || s.longitude != 0) {
-          _stationDistances[s.id] =
-              _haversineMeters(_latitude, _longitude, s.latitude, s.longitude);
+          _stationDistances[s.id] = _haversineMeters(
+            _latitude,
+            _longitude,
+            s.latitude,
+            s.longitude,
+          );
         }
       }
 
@@ -530,11 +540,16 @@ class ReportViewModel extends ChangeNotifier {
 
   /// Haversine formula: distance in meters between two lat/lng points
   static double _haversineMeters(
-      double lat1, double lon1, double lat2, double lon2) {
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
     const R = 6371000.0; // Earth radius in meters
     final dLat = _toRad(lat2 - lat1);
     final dLon = _toRad(lon2 - lon1);
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_toRad(lat1)) *
             math.cos(_toRad(lat2)) *
             math.sin(dLon / 2) *
@@ -604,10 +619,10 @@ class ReportViewModel extends ChangeNotifier {
     final sid = _stationId.isNotEmpty
         ? _stationId
         : _stationName
-            .trim()
-            .toLowerCase()
-            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-            .replaceAll(RegExp(r'^_|_$'), '');
+              .trim()
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+              .replaceAll(RegExp(r'^_|_$'), '');
 
     // Try Firebase first, fall back to offline on any failure
     try {

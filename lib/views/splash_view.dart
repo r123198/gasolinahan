@@ -74,7 +74,7 @@ class _SplashViewState extends State<SplashView> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 36,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: -0.5,
                   color: Colors.black,
                 ),

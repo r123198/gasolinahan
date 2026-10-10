@@ -20,12 +20,15 @@ class AppSectionHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
+        Semantics(
+          header: true,
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
           ),
         ),
         if (actionLabel != null)
@@ -35,9 +38,9 @@ class AppSectionHeader extends StatelessWidget {
               actionLabel!,
               style: const TextStyle(
                 fontFamily: AppTheme.fontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.ink,
               ),
             ),
           ),

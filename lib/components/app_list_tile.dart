@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/adaptive/app_tappable.dart';
+import '../ui/app_theme.dart';
 
 class AppListTile extends StatelessWidget {
   final IconData icon;
@@ -28,8 +29,8 @@ class AppListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final bgColor =
         iconBackgroundColor ??
-        (isDestructive ? Colors.red.shade50 : const Color(0xFFF9FAFB));
-    final contentColor = isDestructive ? Colors.red : Colors.black;
+        (isDestructive ? const Color(0xFFFEF2F2) : AppColors.surfaceMuted);
+    final contentColor = isDestructive ? AppColors.error : AppColors.text;
 
     return AppTappable(
       onTap: onTap,
@@ -52,7 +53,7 @@ class AppListTile extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: contentColor,
                     ),
@@ -60,7 +61,10 @@ class AppListTile extends StatelessWidget {
                   if (subtitle != null)
                     Text(
                       subtitle!,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                 ],
               ),
@@ -68,7 +72,7 @@ class AppListTile extends StatelessWidget {
             if (trailing != null)
               trailing!
             else if (!isDestructive)
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              const Icon(Icons.chevron_right, color: AppColors.textMuted),
           ],
         ),
       ),

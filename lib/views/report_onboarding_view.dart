@@ -17,9 +17,9 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
   final _controller = PageController();
   int _currentPage = 0;
 
-  static const _green = Color(0xFF22C55E);
+  static const _green = AppColors.goStrong;
   static const _charcoal = Color(0xFF111827);
-  static const _grey = Color(0xFF64748B);
+  static const _grey = AppColors.textMuted;
 
   static const _pages = [
     _OnboardingPage(
@@ -191,7 +191,7 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
             fontFamily: AppTheme.fontFamily,
             color: Colors.white,
             fontSize: 16,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(width: 8),
@@ -248,7 +248,7 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 26,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               color: _charcoal,
               letterSpacing: -0.5,
               height: 1.2,

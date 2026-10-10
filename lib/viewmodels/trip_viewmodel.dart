@@ -19,12 +19,14 @@ class TripViewModel extends ChangeNotifier {
     TripService? service,
     LocationSource? source,
     DrivingActivitySource? activity,
-  })  : _tracker = tracker ?? TripTracker(),
-        _service = service ?? TripService(),
-        _source = source ?? DeviceLocationSource(),
-        _activity = activity ?? DeviceDrivingActivitySource();
+  }) : _tracker = tracker ?? TripTracker(),
+       _service = service ?? TripService(),
+       _source = source ?? DeviceLocationSource(),
+       _activity = activity ?? DeviceDrivingActivitySource();
 
   StreamSubscription<TripPoint>? _subscription;
+  final StreamController<TripPoint> _locationUpdates =
+      StreamController<TripPoint>.broadcast();
   StreamSubscription<bool>? _activitySubscription;
   TripPoint? _lastPoint;
   int? _activeTripId;
@@ -40,6 +42,10 @@ class TripViewModel extends ChangeNotifier {
   double get liveDistanceKm => _tracker.distanceMeters / 1000;
   List<TripPoint> get livePoints => _tracker.points;
   List<Trip> get history => _history;
+
+  /// Every GPS sample received, for other features (fill-up nudges) that need
+  /// location without starting a second location stream.
+  Stream<TripPoint> get locationUpdates => _locationUpdates.stream;
   String? get errorMessage => _errorMessage;
 
   /// Starts watching for drives. Safe to call more than once.
@@ -117,6 +123,7 @@ class TripViewModel extends ChangeNotifier {
 
   Future<void> _onPoint(TripPoint p) async {
     _lastPoint = p;
+    _locationUpdates.add(p);
     if (_manualPending) {
       _manualPending = false;
       await _beginManual(p);
@@ -221,6 +228,7 @@ class TripViewModel extends ChangeNotifier {
   void dispose() {
     _subscription?.cancel();
     _activitySubscription?.cancel();
+    _locationUpdates.close();
     super.dispose();
   }
 }

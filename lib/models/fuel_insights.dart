@@ -86,8 +86,9 @@ class FuelInsights {
     return FuelInsights(
       lastFillAt: last.timestamp,
       kmSinceLastFill: kmSince,
-      typicalRefillKm:
-          gaps.isEmpty ? null : gaps.reduce((a, b) => a + b) / gaps.length,
+      typicalRefillKm: gaps.isEmpty
+          ? null
+          : gaps.reduce((a, b) => a + b) / gaps.length,
       kmPerLiter: litersWithGap > 0 ? kmWithLiters / litersWithGap : null,
       costPerKm: km > 0 ? spent / km : null,
       typicalLiters: litersEntered.isEmpty

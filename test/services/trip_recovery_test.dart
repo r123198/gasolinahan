@@ -4,10 +4,10 @@ import 'package:gasolinahan/services/trip_tracker.dart';
 
 final _t0 = DateTime(2026, 1, 1, 8);
 TripPoint pt(int s, double meters) => TripPoint(
-      latitude: 14.5 + meters / 111195.0,
-      longitude: 121.0,
-      timestamp: _t0.add(Duration(seconds: s)),
-    );
+  latitude: 14.5 + meters / 111195.0,
+  longitude: 121.0,
+  timestamp: _t0.add(Duration(seconds: s)),
+);
 
 void main() {
   test('rebuilds a trip from saved points', () {

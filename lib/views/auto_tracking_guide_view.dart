@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../ui/adaptive/app_platform.dart';
+import '../ui/app_theme.dart';
 
 /// One-time setup so the phone opens Gasolinahan whenever it connects to the
 /// car. Trips then start on their own once the car moves.
@@ -103,7 +104,7 @@ class _Section extends StatelessWidget {
             title,
             style: const TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               color: Color(0xFF111827),
             ),
           ),
@@ -119,8 +120,8 @@ class _Section extends StatelessWidget {
                     child: Text(
                       '${i + 1}.',
                       style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textMuted,
                       ),
                     ),
                   ),

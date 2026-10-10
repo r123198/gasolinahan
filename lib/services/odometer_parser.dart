@@ -16,7 +16,8 @@ double? parseOdometer(List<String> lines) {
       final digits = match.group(0)!.replaceAll(RegExp(r'[, ]'), '');
       final value = int.tryParse(digits);
       if (value == null || value <= 0 || value >= _maxOdometerKm) continue;
-      final isBetter = digits.length > bestDigits ||
+      final isBetter =
+          digits.length > bestDigits ||
           (digits.length == bestDigits && value > (best ?? 0));
       if (isBetter) {
         best = value;

@@ -22,6 +22,7 @@ class BrandInfo {
   final Color color;
   final String logoPath; // asset path (png or svg)
   final List<FuelProduct> products;
+
   /// Keywords that appear on price boards for this brand
   final List<String> ocrKeywords;
 
@@ -38,11 +39,7 @@ class BrandInfo {
   /// Build the logo widget at a given size
   Widget logo({double size = 24}) {
     if (isSvg) {
-      return SvgPicture.asset(
-        logoPath,
-        width: size,
-        height: size,
-      );
+      return SvgPicture.asset(logoPath, width: size, height: size);
     }
     return Image.asset(
       logoPath,
@@ -78,12 +75,36 @@ class BrandRegistry {
       name: 'Shell',
       color: const Color(0xFFFFC107),
       logoPath: '$_logoDir/shell.png',
-      ocrKeywords: ['shell', 'fuelsave', 'fuel save', 'v-power', 'vpower', 'v power', 'shellsave'],
+      ocrKeywords: [
+        'shell',
+        'fuelsave',
+        'fuel save',
+        'v-power',
+        'vpower',
+        'v power',
+        'shellsave',
+      ],
       products: [
-        FuelProduct(name: 'FuelSave Unleaded', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'V-Power Gasoline', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'FuelSave Diesel', category: FuelCategory.diesel, color: _green),
-        FuelProduct(name: 'V-Power Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'FuelSave Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'V-Power Gasoline',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'FuelSave Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+        FuelProduct(
+          name: 'V-Power Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -92,22 +113,53 @@ class BrandRegistry {
       logoPath: '$_logoDir/petron.svg',
       ocrKeywords: ['petron', 'xcs', 'blaze', 'turbo diesel', 'xtra advance'],
       products: [
-        FuelProduct(name: 'Xtra Advance', category: FuelCategory.regular, color: _blue),
+        FuelProduct(
+          name: 'Xtra Advance',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
         FuelProduct(name: 'XCS', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'Blaze 100', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Turbo Diesel', category: FuelCategory.diesel, color: _green),
-        FuelProduct(name: 'Diesel Max', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Blaze 100',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Turbo Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+        FuelProduct(
+          name: 'Diesel Max',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
       name: 'Caltex',
       color: const Color(0xFF2563EB),
       logoPath: '$_logoDir/caltex.svg',
-      ocrKeywords: ['caltex', 'chevron', 'silver', 'gold', 'techron', 'havoline'],
+      ocrKeywords: [
+        'caltex',
+        'chevron',
+        'silver',
+        'gold',
+        'techron',
+        'havoline',
+      ],
       products: [
-        FuelProduct(name: 'Silver', category: FuelCategory.regular, color: _blue),
+        FuelProduct(
+          name: 'Silver',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
         FuelProduct(name: 'Gold', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -116,10 +168,26 @@ class BrandRegistry {
       logoPath: '$_logoDir/seaoil.png',
       ocrKeywords: ['seaoil', 'sea oil', 'extreme'],
       products: [
-        FuelProduct(name: 'Extreme 95', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'Extreme 97', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Extreme U', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Extreme Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Extreme 95',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Extreme 97',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Extreme U',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Extreme Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -128,9 +196,21 @@ class BrandRegistry {
       logoPath: '$_logoDir/phoenix.png',
       ocrKeywords: ['phoenix', 'pulse'],
       products: [
-        FuelProduct(name: 'Premium 95', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'Super 98', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Pulse Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Premium 95',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Super 98',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Pulse Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -139,9 +219,21 @@ class BrandRegistry {
       logoPath: '$_logoDir/unioil.png',
       ocrKeywords: ['unioil', 'uni oil', 'unioplus'],
       products: [
-        FuelProduct(name: 'Euro 4 Gasoline', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'UnioPlus', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Euro 5 Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Euro 4 Gasoline',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'UnioPlus',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Euro 5 Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -150,9 +242,21 @@ class BrandRegistry {
       logoPath: '$_logoDir/total.png',
       ocrKeywords: ['total', 'excellium'],
       products: [
-        FuelProduct(name: 'Unleaded', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'Excellium', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Excellium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -161,9 +265,21 @@ class BrandRegistry {
       logoPath: '$_logoDir/jetti.png',
       ocrKeywords: ['jetti', 'jx'],
       products: [
-        FuelProduct(name: 'JX Premium', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'JX Super', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'JX Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'JX Premium',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'JX Super',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'JX Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -172,9 +288,21 @@ class BrandRegistry {
       logoPath: '$_logoDir/ptt.svg',
       ocrKeywords: ['ptt', 'performa'],
       products: [
-        FuelProduct(name: 'Performa Unleaded', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'Performa Super', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Hi-Cetane Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Performa Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Performa Super',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Hi-Cetane Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -183,9 +311,21 @@ class BrandRegistry {
       logoPath: '$_logoDir/cleanfuel.png',
       ocrKeywords: ['cleanfuel', 'clean fuel'],
       products: [
-        FuelProduct(name: 'Unleaded', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'Premium', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Diesel', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
     BrandInfo(
@@ -194,9 +334,21 @@ class BrandRegistry {
       logoPath: '$_logoDir/flyingv.png',
       ocrKeywords: ['flying v', 'flyingv', 'flying-v'],
       products: [
-        FuelProduct(name: 'Unleaded', category: FuelCategory.regular, color: _blue),
-        FuelProduct(name: 'Premium Plus', category: FuelCategory.premium, color: _red),
-        FuelProduct(name: 'Diesel Plus', category: FuelCategory.diesel, color: _green),
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium Plus',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel Plus',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
       ],
     ),
   ];
@@ -222,7 +374,8 @@ class BrandRegistry {
   }
 
   /// Map of all product name keywords to their fuel category (for OCR matching)
-  static final Map<String, FuelCategory> productKeywords = _buildProductKeywords();
+  static final Map<String, FuelCategory> productKeywords =
+      _buildProductKeywords();
 
   static Map<String, FuelCategory> _buildProductKeywords() {
     final map = <String, FuelCategory>{};
@@ -239,7 +392,5 @@ class BrandRegistry {
     return map;
   }
 
-  static const _genericWords = {
-    'euro', 'per', 'plus', 'max', 'super', 'new',
-  };
+  static const _genericWords = {'euro', 'per', 'plus', 'max', 'super', 'new'};
 }

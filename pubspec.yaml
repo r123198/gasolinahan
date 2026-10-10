@@ -60,6 +60,7 @@ dependencies:
   smooth_page_indicator: ^2.0.1
   activity_recognition_flutter: ^6.0.0
   permission_handler: ^12.0.1
+  flutter_local_notifications: ^22.3.1
 
 dev_dependencies:
   flutter_test:
@@ -112,6 +113,14 @@ flutter:
   #         weight: 700
   #
   fonts:
-    - family: Inter
+    - family: Montserrat
       fonts:
-        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Montserrat-Regular.ttf
+        - asset: assets/fonts/Montserrat-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Montserrat-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Montserrat-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Montserrat-ExtraBold.ttf
+          weight: 800

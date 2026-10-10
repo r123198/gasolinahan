@@ -179,7 +179,9 @@ class SeedService {
         'regularPrice': 64.90,
         'premiumPrice': 72.50,
         'dieselPrice': 57.85,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(hours: 1))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(hours: 1)),
+        ),
       },
       {
         '_id': 'petron_c5_taguig',
@@ -191,7 +193,9 @@ class SeedService {
         'regularPrice': 64.45,
         'premiumPrice': 72.10,
         'dieselPrice': 57.50,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(hours: 3))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(hours: 3)),
+        ),
       },
       {
         '_id': 'caltex_ortigas',
@@ -203,7 +207,9 @@ class SeedService {
         'regularPrice': 65.10,
         'premiumPrice': 73.00,
         'dieselPrice': 58.20,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(hours: 5))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(hours: 5)),
+        ),
       },
       {
         '_id': 'shell_commonwealth',
@@ -215,7 +221,9 @@ class SeedService {
         'regularPrice': 64.85,
         'premiumPrice': 72.45,
         'dieselPrice': 57.80,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(hours: 2))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(hours: 2)),
+        ),
       },
       {
         '_id': 'seaoil_katipunan',
@@ -227,7 +235,9 @@ class SeedService {
         'regularPrice': 62.50,
         'premiumPrice': 70.30,
         'dieselPrice': 56.15,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(hours: 6))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(hours: 6)),
+        ),
       },
       {
         '_id': 'unioil_bgc',
@@ -239,7 +249,9 @@ class SeedService {
         'regularPrice': 63.20,
         'premiumPrice': 71.00,
         'dieselPrice': 56.80,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(hours: 4))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(hours: 4)),
+        ),
       },
       {
         '_id': 'petron_espana',
@@ -251,7 +263,9 @@ class SeedService {
         'regularPrice': 64.60,
         'premiumPrice': 72.25,
         'dieselPrice': 57.65,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(hours: 8))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(hours: 8)),
+        ),
       },
       {
         '_id': 'shell_slex_sucat',
@@ -263,7 +277,9 @@ class SeedService {
         'regularPrice': 64.95,
         'premiumPrice': 72.55,
         'dieselPrice': 57.90,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(minutes: 30))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(minutes: 30)),
+        ),
       },
       {
         '_id': 'caltex_makati_ave',
@@ -275,7 +291,9 @@ class SeedService {
         'regularPrice': 65.25,
         'premiumPrice': 73.15,
         'dieselPrice': 58.35,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(days: 1))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(days: 1)),
+        ),
       },
       {
         '_id': 'seaoil_marcos_highway',
@@ -287,7 +305,9 @@ class SeedService {
         'regularPrice': 62.30,
         'premiumPrice': 70.10,
         'dieselPrice': 55.95,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(days: 1, hours: 3))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(days: 1, hours: 3)),
+        ),
       },
       {
         '_id': 'petron_nlex_valenzuela',
@@ -299,7 +319,9 @@ class SeedService {
         'regularPrice': 64.50,
         'premiumPrice': 72.15,
         'dieselPrice': 57.55,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(days: 2))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(days: 2)),
+        ),
       },
       {
         '_id': 'shell_alabang_zapote',
@@ -311,7 +333,9 @@ class SeedService {
         'regularPrice': 64.90,
         'premiumPrice': 72.50,
         'dieselPrice': 57.85,
-        'lastUpdated': Timestamp.fromDate(now.subtract(const Duration(hours: 12))),
+        'lastUpdated': Timestamp.fromDate(
+          now.subtract(const Duration(hours: 12)),
+        ),
       },
     ];
   }
@@ -365,7 +389,9 @@ class SeedService {
         'reportedRegularPrice': 64.95,
         'reportedPremiumPrice': 72.55,
         'reportedDieselPrice': 57.90,
-        'timestamp': Timestamp.fromDate(now.subtract(const Duration(minutes: 30))),
+        'timestamp': Timestamp.fromDate(
+          now.subtract(const Duration(minutes: 30)),
+        ),
         'pointsAwarded': 50,
         'status': 'pending',
       },

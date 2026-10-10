@@ -97,7 +97,7 @@ class _Pill extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: foreground,
                 ),
               ),

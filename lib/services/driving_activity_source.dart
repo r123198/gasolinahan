@@ -47,8 +47,7 @@ class DeviceDrivingActivitySource implements DrivingActivitySource {
       ActivityType.walking ||
       ActivityType.onFoot ||
       ActivityType.running ||
-      ActivityType.onBicycle =>
-        false,
+      ActivityType.onBicycle => false,
       _ => null,
     };
   }

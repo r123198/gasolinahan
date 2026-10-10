@@ -125,7 +125,8 @@ class TripTracker {
     final step = _stepMeters(last, p);
     if (step < _minStepMeters) return TrackerUpdate.none;
 
-    final seconds = p.timestamp.difference(last.timestamp).inMilliseconds / 1000;
+    final seconds =
+        p.timestamp.difference(last.timestamp).inMilliseconds / 1000;
     if (seconds > 0 && step / seconds > _maxPlausibleSpeedMps) {
       return TrackerUpdate.none;
     }
@@ -142,7 +143,8 @@ class TripTracker {
     if (reported != null && reported >= 0) return reported;
     final prev = _previous;
     if (prev == null) return 0;
-    final seconds = p.timestamp.difference(prev.timestamp).inMilliseconds / 1000;
+    final seconds =
+        p.timestamp.difference(prev.timestamp).inMilliseconds / 1000;
     if (seconds <= 0) return 0;
     final step = _stepMeters(prev, p);
     return step < _minStepMeters ? 0 : step / seconds;

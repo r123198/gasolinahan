@@ -1,7 +1,9 @@
 import 'dart:ui' as ui;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import '../components/app_primary_button.dart';
 import '../ui/adaptive/app_spinner.dart';
+import '../ui/adaptive/app_toast.dart';
 import '../ui/adaptive/app_text_button.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/app_theme.dart';
@@ -37,19 +39,42 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_controller == null || !_controller!.value.isInitialized) return;
+    final controller = _controller;
     if (state == AppLifecycleState.inactive) {
-      _controller?.dispose();
-    } else if (state == AppLifecycleState.resumed) {
+      if (controller == null || !controller.value.isInitialized) return;
+      // Drop the controller from state *before* disposing it so no rebuild
+      // can hand a disposed controller to CameraPreview.
+      setState(() {
+        _controller = null;
+        _isInitialized = false;
+      });
+      controller.dispose();
+    } else if (state == AppLifecycleState.resumed &&
+        controller == null &&
+        _errorMessage == null) {
       _initCamera();
     }
   }
 
+  Future<void> _retry() async {
+    setState(() => _errorMessage = null);
+    await _initCamera();
+  }
+
+  static String _friendlyCameraError(CameraException e) => switch (e.code) {
+    'CameraAccessDenied' ||
+    'CameraAccessDeniedWithoutPrompt' ||
+    'CameraAccessRestricted' =>
+      'Camera access is off. Allow it in Settings to scan price boards.',
+    _ => "Couldn't start the camera. Try again.",
+  };
+
   Future<void> _initCamera() async {
     try {
       final cameras = await availableCameras();
+      if (!mounted) return;
       if (cameras.isEmpty) {
-        setState(() => _errorMessage = 'No camera available');
+        setState(() => _errorMessage = 'No camera found on this phone.');
         return;
       }
 
@@ -58,23 +83,26 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
         orElse: () => cameras.first,
       );
 
-      _controller = CameraController(
+      final controller = CameraController(
         back,
         ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
+      await controller.initialize();
+      await controller.setFlashMode(_flashMode);
 
-      await _controller!.initialize();
-      await _controller!.setFlashMode(_flashMode);
-
-      if (mounted) {
-        setState(() => _isInitialized = true);
+      if (!mounted) {
+        await controller.dispose();
+        return;
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _errorMessage = 'Camera error: $e');
-      }
+      setState(() {
+        _controller = controller;
+        _isInitialized = true;
+      });
+    } on CameraException catch (e) {
+      debugPrint('Camera init failed: ${e.code} ${e.description}');
+      if (mounted) setState(() => _errorMessage = _friendlyCameraError(e));
     }
   }
 
@@ -92,11 +120,11 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
       if (mounted) {
         Navigator.pop(context, file.path);
       }
-    } catch (e) {
-      setState(() {
-        _isCapturing = false;
-        _errorMessage = 'Capture failed: $e';
-      });
+    } on CameraException catch (e) {
+      debugPrint('Capture failed: ${e.code} ${e.description}');
+      if (!mounted) return;
+      setState(() => _isCapturing = false);
+      showAppToast(context, "Couldn't take the photo. Try again.");
     }
   }
 
@@ -112,16 +140,16 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
   }
 
   IconData get _flashIcon => switch (_flashMode) {
-        FlashMode.auto => Icons.flash_auto_rounded,
-        FlashMode.always => Icons.flash_on_rounded,
-        _ => Icons.flash_off_rounded,
-      };
+    FlashMode.auto => Icons.flash_auto_rounded,
+    FlashMode.always => Icons.flash_on_rounded,
+    _ => Icons.flash_off_rounded,
+  };
 
   String get _flashLabel => switch (_flashMode) {
-        FlashMode.auto => 'Auto',
-        FlashMode.always => 'On',
-        _ => 'Off',
-      };
+    FlashMode.auto => 'Auto',
+    FlashMode.always => 'On',
+    _ => 'Off',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -129,9 +157,10 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
       backgroundColor: Colors.black,
       body: _errorMessage != null
           ? _buildError()
-          : !_isInitialized
-              ? _buildLoading()
-              : _buildCamera(),
+          : switch (_controller) {
+              final controller? when _isInitialized => _buildCamera(controller),
+              _ => _buildLoading(),
+            },
     );
   }
 
@@ -140,10 +169,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppSpinner(
-            color: Colors.white,
-            strokeWidth: 2,
-          ),
+          AppSpinner(color: Colors.white, strokeWidth: 2),
           SizedBox(height: 16),
           Text(
             'Starting camera...',
@@ -169,11 +195,18 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
             const SizedBox(height: 24),
+            AppPrimaryButton(
+              label: 'Try again',
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.ink,
+              onPressed: _retry,
+            ),
+            const SizedBox(height: 8),
             AppTextButton(
               onPressed: () => Navigator.pop(context),
               foregroundColor: Colors.white,
               child: const Text(
-                'Go Back',
+                'Go back',
                 style: TextStyle(fontFamily: AppTheme.fontFamily),
               ),
             ),
@@ -183,21 +216,17 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
     );
   }
 
-  Widget _buildCamera() {
+  Widget _buildCamera(CameraController controller) {
     return Stack(
       fit: StackFit.expand,
       children: [
         // Camera preview
-        Positioned.fill(
-          child: CameraPreview(_controller!),
-        ),
+        Positioned.fill(child: CameraPreview(controller)),
 
         // Dark overlay with cutout window
         Positioned.fill(
           child: IgnorePointer(
-            child: CustomPaint(
-              painter: _ScanOverlayPainter(),
-            ),
+            child: CustomPaint(painter: _ScanOverlayPainter()),
           ),
         ),
 
@@ -212,6 +241,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
               child: Row(
                 children: [
                   AppIconButton(
+                    tooltip: 'Close camera',
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(
                       Icons.close_rounded,
@@ -251,6 +281,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
                   ),
                   const Spacer(),
                   AppIconButton(
+                    tooltip: 'Flash: $_flashLabel',
                     onPressed: _toggleFlash,
                     icon: Icon(_flashIcon, color: Colors.white, size: 28),
                   ),
@@ -272,7 +303,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -362,11 +393,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          _flashIcon,
-                          color: Colors.white70,
-                          size: 14,
-                        ),
+                        Icon(_flashIcon, color: Colors.white70, size: 14),
                         const SizedBox(width: 6),
                         Text(
                           'Flash $_flashLabel',
@@ -386,36 +413,40 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
                       // Spacer to balance layout (no gallery — camera only)
                       const SizedBox(width: 48),
                       // Shutter button
-                      GestureDetector(
+                      Semantics(
+                        button: true,
+                        enabled: !_isCapturing,
+                        label: _isCapturing ? 'Taking photo' : 'Take photo',
+                        excludeSemantics: true,
                         onTap: _isCapturing ? null : _capturePhoto,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          width: 76,
-                          height: 76,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 4,
-                            ),
-                          ),
-                          child: Container(
-                            margin: const EdgeInsets.all(4),
+                        child: GestureDetector(
+                          onTap: _isCapturing ? null : _capturePhoto,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 76,
+                            height: 76,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: _isCapturing
-                                  ? Colors.grey
-                                  : Colors.white,
+                              border: Border.all(color: Colors.white, width: 4),
                             ),
-                            child: _isCapturing
-                                ? const Padding(
-                                    padding: EdgeInsets.all(18),
-                                    child: AppSpinner(
-                                      color: Colors.black54,
-                                      strokeWidth: 2.5,
-                                    ),
-                                  )
-                                : null,
+                            child: Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _isCapturing
+                                    ? Colors.grey
+                                    : Colors.white,
+                              ),
+                              child: _isCapturing
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(18),
+                                      child: AppSpinner(
+                                        color: Colors.black54,
+                                        strokeWidth: 2.5,
+                                      ),
+                                    )
+                                  : null,
+                            ),
                           ),
                         ),
                       ),

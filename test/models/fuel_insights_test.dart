@@ -4,21 +4,21 @@ import 'package:gasolinahan/models/fuel_insights.dart';
 import 'package:gasolinahan/models/trip_model.dart';
 
 FillUp fill(double spent, double odo, DateTime at, {double? liters}) => FillUp(
-      stationId: 's',
-      stationName: 'S',
-      brand: 'Shell',
-      fuelType: 'regular',
-      amountSpent: spent,
-      liters: liters,
-      odometerKm: odo,
-      timestamp: at,
-    );
+  stationId: 's',
+  stationName: 'S',
+  brand: 'Shell',
+  fuelType: 'regular',
+  amountSpent: spent,
+  liters: liters,
+  odometerKm: odo,
+  timestamp: at,
+);
 
 Trip trip(DateTime at, double km) => Trip(
-      startedAt: at,
-      endedAt: at.add(const Duration(minutes: 20)),
-      distanceMeters: km * 1000,
-    );
+  startedAt: at,
+  endedAt: at.add(const Duration(minutes: 20)),
+  distanceMeters: km * 1000,
+);
 
 final d1 = DateTime(2026, 1, 1);
 final d5 = DateTime(2026, 1, 5);

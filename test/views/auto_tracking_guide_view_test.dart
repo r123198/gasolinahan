@@ -7,9 +7,7 @@ void main() {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      const MaterialApp(home: AutoTrackingGuideView()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: AutoTrackingGuideView()));
     expect(find.text('Track trips automatically'), findsOneWidget);
     expect(find.text('iPhone: CarPlay or car Bluetooth'), findsOneWidget);
     expect(find.text('Android: car Bluetooth'), findsOneWidget);

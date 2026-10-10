@@ -50,7 +50,7 @@ class _SeedViewState extends State<SeedView> {
           children: [
             const Text(
               'This will create test users and populate Firestore with sample stations, and reports.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: AppColors.textMuted),
             ),
             const SizedBox(height: 8),
             const Text(

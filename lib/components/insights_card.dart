@@ -4,6 +4,7 @@ import '../models/fuel_insights.dart';
 import '../ui/tracker_format.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
+import '../ui/app_theme.dart';
 
 /// Home card: how far you have driven since filling up and how much is left.
 class InsightsCard extends StatelessWidget {
@@ -35,7 +36,7 @@ class InsightsCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF64748B),
+              color: AppColors.textMuted,
             ),
           ),
           const SizedBox(height: 4),
@@ -43,7 +44,7 @@ class InsightsCard extends StatelessWidget {
             '${formatKmShort(insights.kmSinceLastFill ?? 0)} tracked',
             style: const TextStyle(
               fontSize: 24,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               letterSpacing: -0.5,
               color: Color(0xFF111827),
             ),
@@ -78,7 +79,7 @@ class InsightsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF64748B),
+                color: AppColors.textMuted,
               ),
             ),
           if (insights.costPerKm != null || insights.kmPerLiter != null) ...[
@@ -116,7 +117,7 @@ class _Chip extends StatelessWidget {
         text,
         style: const TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: Color(0xFF111827),
         ),
       ),

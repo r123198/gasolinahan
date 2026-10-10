@@ -3,7 +3,8 @@ import '../models/station_summary.dart';
 import '../ui/adaptive/app_tappable.dart';
 import '../ui/app_format.dart';
 import '../ui/tracker_format.dart';
-import '../views/dashboard_view.dart' show brandLogoWidget;
+import 'brand_logo.dart';
+import '../ui/app_theme.dart';
 
 /// Full-width row card summarising one station the user has filled up at.
 class StationTrackerCard extends StatelessWidget {
@@ -66,7 +67,7 @@ class StationTrackerCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             color: Color(0xFF111827),
                             letterSpacing: -0.2,
                           ),
@@ -77,7 +78,7 @@ class StationTrackerCard extends StatelessWidget {
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF94A3B8),
+                            color: AppColors.textMuted,
                           ),
                         ),
                       ],
@@ -91,7 +92,7 @@ class StationTrackerCard extends StatelessWidget {
                         formatPesos(summary.totalSpent),
                         style: const TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           color: Color(0xFF111827),
                           letterSpacing: -0.5,
                         ),
@@ -101,7 +102,7 @@ class StationTrackerCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF94A3B8),
+                          color: AppColors.textMuted,
                         ),
                       ),
                     ],
@@ -146,7 +147,7 @@ class _Stat extends StatelessWidget {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF94A3B8),
+              color: AppColors.textMuted,
             ),
           ),
           const SizedBox(height: 2),
@@ -156,7 +157,7 @@ class _Stat extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: Color(0xFF111827),
             ),
           ),

@@ -32,9 +32,9 @@ List<TrackerUpdate> drive(
 }) {
   final updates = <TrackerUpdate>[];
   for (var i = 1; i <= seconds; i++) {
-    updates.add(tracker.onPoint(
-      pt(fromSecond + i, fromMeters + speed * i, speed: speed),
-    ));
+    updates.add(
+      tracker.onPoint(pt(fromSecond + i, fromMeters + speed * i, speed: speed)),
+    );
   }
   return updates;
 }
@@ -55,16 +55,25 @@ void main() {
       expect(tracker.isTracking, isFalse);
     });
 
-    test('starts after sustained driving speed and keeps the buffered points',
-        () {
-      final tracker = TripTracker();
-      final updates =
-          drive(tracker, fromSecond: 0, fromMeters: 0, seconds: 60);
+    test(
+      'starts after sustained driving speed and keeps the buffered points',
+      () {
+        final tracker = TripTracker();
+        final updates = drive(
+          tracker,
+          fromSecond: 0,
+          fromMeters: 0,
+          seconds: 60,
+        );
 
-      expect(tracker.isTracking, isTrue);
-      expect(updates.where((u) => u.event == TrackerEvent.started), hasLength(1));
-      expect(tracker.points.length, greaterThan(30));
-    });
+        expect(tracker.isTracking, isTrue);
+        expect(
+          updates.where((u) => u.event == TrackerEvent.started),
+          hasLength(1),
+        );
+        expect(tracker.points.length, greaterThan(30));
+      },
+    );
 
     test('a slow crawl never starts a trip', () {
       final tracker = TripTracker();
