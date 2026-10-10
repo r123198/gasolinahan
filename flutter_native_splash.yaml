@@ -1,0 +1,9 @@
+# Regenerate with: fvm dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/branding/splash.png
+  android_12:
+    color: "#FFFFFF"
+    image: assets/branding/splash_android12.png
+  ios_content_mode: center
+  fullscreen: false

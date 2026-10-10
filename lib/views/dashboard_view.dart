@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
@@ -13,20 +14,18 @@ import '../viewmodels/fill_up_nudge_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
 import 'fill_up_form_sheet.dart';
-import '../components/track_me_button.dart';
 import '../components/detour_card.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_platform.dart';
 import '../ui/adaptive/app_sheet.dart';
-import '../ui/adaptive/app_spinner.dart';
-import '../ui/adaptive/app_tappable.dart';
 import '../ui/adaptive/app_toast.dart';
 import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
-import '../components/app_empty_state.dart';
 import '../components/app_primary_button.dart';
 import '../components/brand_logo.dart';
-import '../components/report_price_fab.dart';
+import '../components/map_bottom_controls.dart';
+import '../services/heading_stream.dart';
+import 'nearby_stations_sheet.dart';
 import 'home_view.dart';
 import 'profile_view.dart';
 
@@ -47,10 +46,8 @@ const List<_NavTab> _tabs = [
   ),
 ];
 
-/// Stations list snap points, as fractions of the map tab's height.
-const _sheetPeek = 0.14;
-const _sheetHalf = 0.42;
-const _sheetFull = 0.78;
+/// Zoom used when centering on the user.
+const _followZoom = 16.0;
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -61,9 +58,17 @@ class DashboardView extends StatefulWidget {
 
 class _DashboardViewState extends State<DashboardView> {
   int _selectedIndex = 0;
-  final DraggableScrollableController _sheetController =
-      DraggableScrollableController();
-  final ValueNotifier<double> _sheetExtent = ValueNotifier(_sheetHalf);
+
+  /// Tells the location layer to re-center (value = zoom) on demand.
+  final StreamController<double?> _alignToUser = StreamController.broadcast();
+
+  /// While true the map keeps the user's dot centered as they move; any
+  /// pan by the user turns it off.
+  bool _followUser = false;
+
+  /// Created once: the layer resubscribes whenever it gets a new stream.
+  final Stream<LocationMarkerHeading?> _headingStream =
+      headingStreamForDevice();
   final MapController _mapController = MapController();
   final Location _location = Location();
 
@@ -103,7 +108,7 @@ class _DashboardViewState extends State<DashboardView> {
     _fillUpsVm.removeListener(_syncNudgeFillUps);
     _nudgesVm.removeListener(_openNudgedFillUp);
     _searchController.dispose();
-    _sheetExtent.dispose();
+    _alignToUser.close();
     super.dispose();
   }
 
@@ -123,7 +128,12 @@ class _DashboardViewState extends State<DashboardView> {
   void _syncNudgeStations() =>
       _nudgesVm.updateStations(_stationsVm.nearbyStations);
 
-  void _syncNudgeFillUps() => _nudgesVm.updateFillUps(_fillUpsVm.fillUps);
+  void _syncNudgeFillUps() {
+    _nudgesVm.updateFillUps(_fillUpsVm.fillUps);
+    // The map has no fuel picker, so prices follow the fuel you last bought.
+    final fuel = FuelType.values.asNameMap()[_fillUpsVm.latest?.fuelType];
+    if (fuel != null) _stationsVm.setFuelType(fuel);
+  }
 
   void _openNudgedFillUp() {
     if (!mounted) return;
@@ -457,6 +467,9 @@ class _DashboardViewState extends State<DashboardView> {
       // and the tracker keeps its scroll offset when switching tabs.
       body: IndexedStack(
         index: _selectedIndex,
+        // Each tab fills the body. Without this the map tab, a Stack of
+        // positioned layers, shrinks to its only sized child (the search row).
+        sizing: StackFit.expand,
         children: [
           const SafeArea(bottom: false, child: HomeView()),
           _buildMapTab(scheme),
@@ -496,57 +509,61 @@ class _DashboardViewState extends State<DashboardView> {
           bottom: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(child: _buildSearchBar(context)),
-                    const SizedBox(width: 12),
-                    _buildIconButton(
-                      context: context,
-                      icon: Icons.my_location_outlined,
-                      tooltip: 'Go to my location',
-                      onPressed: _goToMyLocation,
+                Expanded(child: _buildSearchBar(context)),
+                const SizedBox(width: 12),
+                SizedBox(
+                  height: 48,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pushNamed(context, '/report'),
+                    icon: const Icon(Icons.photo_camera_outlined, size: 20),
+                    label: const Text('Report'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.ink,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const _FuelChips(),
-                const SizedBox(height: 12),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: TrackMeButton(),
+                  ),
                 ),
               ],
             ),
           ),
         ),
-        NotificationListener<DraggableScrollableNotification>(
-          onNotification: (n) {
-            _sheetExtent.value = n.extent;
-            return false;
-          },
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
           child: Consumer<DashboardViewModel>(
-            builder: (context, vm, _) {
-              return _StationsSheet(
-                controller: _sheetController,
-                cheapestId: _cheapestNearbyId(vm.nearbyStations, vm.fuelType),
-                userLat: _userLat,
-                userLng: _userLng,
-                onStationTap: (station) {
-                  _showStationDetail(station);
-                },
-              );
-            },
+            builder: (context, vm, _) => MapBottomControls(
+              stationCount: vm.visibleStations.length,
+              onShowStations: _openNearbyStations,
+              onMyLocation: _goToMyLocation,
+              onTrackingStarted: _startFollowingUser,
+            ),
           ),
-        ),
-        ReportPriceFab(
-          sheetExtent: _sheetExtent,
-          onPressed: () => Navigator.pushNamed(context, '/report'),
         ),
       ],
     );
+  }
+
+  /// Centers on the user and keeps them centered while they move.
+  void _startFollowingUser() {
+    setState(() => _followUser = true);
+    _alignToUser.add(_followZoom);
+  }
+
+  Future<void> _openNearbyStations({String query = ''}) async {
+    FocusScope.of(context).unfocus();
+    final vm = context.read<DashboardViewModel>();
+    final station = await showNearbyStationsSheet(
+      context,
+      cheapestId: _cheapestNearbyId(vm.nearbyStations, vm.fuelType),
+      userLat: _userLat,
+      userLng: _userLng,
+      query: query,
+    );
+    if (station != null && mounted) _showStationDetail(station);
   }
 
   Widget _buildMap() {
@@ -665,6 +682,13 @@ class _DashboardViewState extends State<DashboardView> {
             minZoom: 5,
             maxZoom: 18,
             // Disable rotation — pinch only zooms
+            // Dragging the map means the user wants to look around, so stop
+            // pulling the view back to them.
+            onPositionChanged: (_, hasGesture) {
+              if (hasGesture && _followUser) {
+                setState(() => _followUser = false);
+              }
+            },
             interactionOptions: const InteractionOptions(
               flags:
                   InteractiveFlag.pinchZoom |
@@ -679,13 +703,14 @@ class _DashboardViewState extends State<DashboardView> {
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.gasolinahan.app',
             ),
-            const RichAttributionWidget(
-              alignment: AttributionAlignment.bottomLeft,
-              attributions: [
-                TextSourceAttribution('© OpenStreetMap contributors'),
-              ],
-            ),
+            // OSM credit is shown under the map controls instead of the
+            // corner widget, which the floating nav bar would cover.
             CurrentLocationLayer(
+              headingStream: _headingStream,
+              alignPositionStream: _alignToUser.stream,
+              alignPositionOnUpdate: _followUser
+                  ? AlignOnUpdate.always
+                  : AlignOnUpdate.never,
               style: LocationMarkerStyle(
                 marker: const DefaultLocationMarker(
                   color: Color(0xFF2563EB),
@@ -741,7 +766,7 @@ class _DashboardViewState extends State<DashboardView> {
               )
             : null,
       ),
-      onSubmitted: (_) => FocusScope.of(context).unfocus(),
+      onSubmitted: (q) => _openNearbyStations(query: q),
     );
   }
 
@@ -777,7 +802,7 @@ class _DashboardViewState extends State<DashboardView> {
               tooltip: 'Clear',
             )
           : null,
-      onSubmitted: (_) => FocusScope.of(context).unfocus(),
+      onSubmitted: (q) => _openNearbyStations(query: q),
     );
   }
 
@@ -797,36 +822,6 @@ class _DashboardViewState extends State<DashboardView> {
             label: tab.label,
           ),
       ],
-    );
-  }
-
-  Widget _buildIconButton({
-    required BuildContext context,
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0x0A000000)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 24,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: AppIconButton(
-        icon: Icon(icon, color: scheme.primary),
-        tooltip: tooltip,
-        onPressed: onPressed,
-      ),
     );
   }
 }
@@ -860,510 +855,4 @@ class _TrianglePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _FuelChips extends StatelessWidget {
-  const _FuelChips();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Consumer<DashboardViewModel>(
-      builder: (context, vm, _) {
-        Widget fuelChip(String label, FuelType type) {
-          final selected = vm.fuelType == type;
-          return ChoiceChip(
-            label: Text(label),
-            selected: selected,
-            onSelected: (_) => vm.setFuelType(type),
-            showCheckmark: false,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(999),
-            ),
-            selectedColor: scheme.primary,
-            backgroundColor: Colors.white.withValues(alpha: 0.96),
-            labelStyle: TextStyle(
-              color: selected ? Colors.white : const Color(0xFF0F172A),
-              fontWeight: FontWeight.w700,
-            ),
-          );
-        }
-
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          clipBehavior: Clip.none,
-          child: Row(
-            children: [
-              fuelChip('Regular', FuelType.regular),
-              const SizedBox(width: 8),
-              fuelChip('Premium', FuelType.premium),
-              const SizedBox(width: 8),
-              fuelChip('Diesel', FuelType.diesel),
-              const SizedBox(width: 12),
-              FilterChip(
-                label: const Text('Only with prices'),
-                selected: vm.onlyWithPrices,
-                onSelected: (_) => vm.toggleOnlyWithPrices(),
-                showCheckmark: false,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                selectedColor: scheme.secondary.withValues(alpha: 0.18),
-                backgroundColor: Colors.white.withValues(alpha: 0.96),
-                labelStyle: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _StationsSheet extends StatelessWidget {
-  final DraggableScrollableController controller;
-  final void Function(StationModel station) onStationTap;
-  final String? cheapestId;
-  final double? userLat;
-  final double? userLng;
-  const _StationsSheet({
-    required this.controller,
-    required this.onStationTap,
-    this.cheapestId,
-    this.userLat,
-    this.userLng,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DraggableScrollableSheet(
-      controller: controller,
-      initialChildSize: _sheetHalf,
-      minChildSize: _sheetPeek,
-      maxChildSize: _sheetFull,
-      snap: true,
-      snapSizes: const [_sheetPeek, _sheetHalf, _sheetFull],
-      builder: (context, scrollController) {
-        return Container(
-          // extendBody makes the body's bottom padding equal the floating
-          // nav bar's height (plus the gesture inset), so clear exactly that.
-          margin: EdgeInsets.fromLTRB(
-            12,
-            0,
-            12,
-            MediaQuery.paddingOf(context).bottom + 8,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.97),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: const Color(0x0A000000)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1A000000),
-                blurRadius: 44,
-                offset: Offset(0, -10),
-              ),
-            ],
-          ),
-          clipBehavior: Clip.hardEdge,
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              Expanded(
-                child: Consumer<DashboardViewModel>(
-                  builder: (context, vm, _) {
-                    if (vm.isLoading) {
-                      return _buildSheetHeader(
-                        context,
-                        scrollController,
-                        child: const Center(child: AppSpinner(strokeWidth: 2)),
-                      );
-                    }
-                    if (vm.errorMessage != null) {
-                      return _buildSheetHeader(
-                        context,
-                        scrollController,
-                        child: AppEmptyState(
-                          title: "Can't load stations",
-                          subtitle: vm.errorMessage!,
-                          actionLabel: 'Try again',
-                          onAction: vm.fetchNearbyStations,
-                        ),
-                      );
-                    }
-                    final stations = vm.visibleStations;
-                    if (stations.isEmpty) {
-                      return _buildSheetHeader(
-                        context,
-                        scrollController,
-                        child: AppEmptyState(
-                          title: 'No stations found',
-                          subtitle: vm.onlyWithPrices
-                              ? 'Try turning off "Only with prices".'
-                              : 'Try again in a different area.',
-                          actionLabel: 'Report prices',
-                          onAction: () =>
-                              Navigator.pushNamed(context, '/report'),
-                        ),
-                      );
-                    }
-
-                    return ListView.separated(
-                      controller: scrollController,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      itemCount: stations.length + 1,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) {
-                        if (i == 0) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Row(
-                              children: [
-                                const Expanded(
-                                  child: Text(
-                                    'Nearby stations',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: -0.3,
-                                    ),
-                                  ),
-                                ),
-                                AppIconButton(
-                                  onPressed: () {
-                                    context
-                                        .read<DashboardViewModel>()
-                                        .fetchNearbyStations();
-                                  },
-                                  icon: const Icon(Icons.refresh),
-                                  tooltip: 'Refresh',
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        final s = stations[i - 1];
-                        final accent = brandAccent(s.brand);
-                        final price = switch (vm.fuelType) {
-                          FuelType.regular => s.regularPrice,
-                          FuelType.premium => s.premiumPrice,
-                          FuelType.diesel => s.dieselPrice,
-                        };
-                        final fuelLabel = switch (vm.fuelType) {
-                          FuelType.regular => 'Regular',
-                          FuelType.premium => 'Premium',
-                          FuelType.diesel => 'Diesel',
-                        };
-                        final isCheapest = s.id == cheapestId;
-
-                        // Calculate distance from user
-                        String? distLabel;
-                        if (userLat != null &&
-                            userLng != null &&
-                            (s.latitude != 0 || s.longitude != 0)) {
-                          final dist = _DashboardViewState._haversineMeters(
-                            userLat!,
-                            userLng!,
-                            s.latitude,
-                            s.longitude,
-                          );
-                          if (dist < 100) {
-                            distLabel = '${dist.round()}m';
-                          } else if (dist < 1000) {
-                            distLabel = '${(dist / 10).round() * 10}m';
-                          } else {
-                            distLabel = '${(dist / 1000).toStringAsFixed(1)}km';
-                          }
-                        }
-
-                        return AppTappable(
-                          borderRadius: BorderRadius.circular(22),
-                          onTap: () => onStationTap(s),
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: isCheapest
-                                  ? AppColors.goStrong.withValues(alpha: 0.06)
-                                  : scheme.surface,
-                              borderRadius: BorderRadius.circular(22),
-                              border: Border.all(
-                                color: isCheapest
-                                    ? AppColors.goStrong.withValues(alpha: 0.30)
-                                    : const Color(0x0A000000),
-                                width: isCheapest ? 1.5 : 1,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (isCheapest)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.goStrong,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Text(
-                                        'CHEAPEST NEARBY',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.8,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 46,
-                                      height: 46,
-                                      decoration: BoxDecoration(
-                                        color: isCheapest
-                                            ? AppColors.goStrong.withValues(
-                                                alpha: 0.14,
-                                              )
-                                            : accent.withValues(alpha: 0.14),
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(
-                                          color: isCheapest
-                                              ? AppColors.goStrong.withValues(
-                                                  alpha: 0.30,
-                                                )
-                                              : accent.withValues(alpha: 0.22),
-                                        ),
-                                      ),
-                                      child: brandLogoWidget(s.brand, 24),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  s.name,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w700,
-                                                    letterSpacing: -0.2,
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: isCheapest
-                                                      ? AppColors.goStrong
-                                                            .withValues(
-                                                              alpha: 0.12,
-                                                            )
-                                                      : scheme.primary
-                                                            .withValues(
-                                                              alpha: 0.06,
-                                                            ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        999,
-                                                      ),
-                                                ),
-                                                child: Text(
-                                                  '$fuelLabel \u2022 ${formatPricePerLiter(price)}',
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.w700,
-                                                    fontSize: 12,
-                                                    color: isCheapest
-                                                        ? AppColors.goStrong
-                                                        : scheme.primary,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            s.address.isEmpty
-                                                ? (s.brand.isEmpty
-                                                      ? '\u2014'
-                                                      : s.brand)
-                                                : s.address,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: AppColors.textMuted,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            children: [
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: scheme
-                                                      .surfaceContainerHighest,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        999,
-                                                      ),
-                                                ),
-                                                child: Text(
-                                                  s.brand.isEmpty
-                                                      ? 'Station'
-                                                      : s.brand,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w700,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              ),
-                                              if (distLabel != null) ...[
-                                                const SizedBox(width: 8),
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 6,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(
-                                                      0xFF2563EB,
-                                                    ).withValues(alpha: 0.08),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          999,
-                                                        ),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      const Icon(
-                                                        Icons.near_me_outlined,
-                                                        size: 11,
-                                                        color: Color(
-                                                          0xFF2563EB,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 3),
-                                                      Text(
-                                                        distLabel,
-                                                        style: const TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w800,
-                                                          fontSize: 11,
-                                                          color: Color(
-                                                            0xFF2563EB,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
-                                              const SizedBox(width: 8),
-                                              Flexible(
-                                                child: Text(
-                                                  'Updated ${formatRelativeTime(s.lastUpdated)}',
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: AppColors.textMuted,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSheetHeader(
-    BuildContext context,
-    ScrollController scrollController, {
-    required Widget child,
-  }) {
-    return CustomScrollView(
-      controller: scrollController,
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Nearby stations',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                ),
-                AppIconButton(
-                  onPressed: () {
-                    context.read<DashboardViewModel>().fetchNearbyStations();
-                  },
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Refresh',
-                ),
-              ],
-            ),
-          ),
-        ),
-        SliverFillRemaining(child: child),
-      ],
-    );
-  }
 }

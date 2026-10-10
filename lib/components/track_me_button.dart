@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_tappable.dart';
+import '../ui/app_theme.dart';
 import '../ui/adaptive/app_toast.dart';
 import '../ui/tracker_format.dart';
 import '../viewmodels/trip_viewmodel.dart';
@@ -10,8 +12,11 @@ const _trackingRed = Color(0xFFDC2626);
 
 /// "Track me" pill for the map. Trips also start on their own when driving is
 /// detected, so this mostly shows status; pressing it starts or stops by hand.
+/// [onStarted] runs once tracking begins, so the map can follow the user.
 class TrackMeButton extends StatelessWidget {
-  const TrackMeButton({super.key});
+  final VoidCallback? onStarted;
+
+  const TrackMeButton({super.key, this.onStarted});
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +37,7 @@ class TrackMeButton extends StatelessWidget {
             const SizedBox(width: 8),
             _RoundIcon(
               icon: Icons.history_rounded,
+              tooltip: 'Trip history',
               onTap: () => showTripHistory(context),
             ),
           ],
@@ -46,12 +52,15 @@ class TrackMeButton extends StatelessWidget {
       return;
     }
     await vm.trackNow();
-    if (vm.permissionDenied && context.mounted) {
+    if (!context.mounted) return;
+    if (vm.permissionDenied) {
       showAppToast(
         context,
         'Allow location (choose "Always") so trips can be tracked.',
       );
+      return;
     }
+    onStarted?.call();
   }
 }
 
@@ -70,7 +79,7 @@ class _Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = isActive ? Colors.white : const Color(0xFF111827);
+    final foreground = isActive ? Colors.white : AppColors.ink;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: isActive ? _trackingRed : Colors.white,
@@ -87,21 +96,29 @@ class _Pill extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: foreground),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: foreground,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: SizedBox(
+            height: 48,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: foreground),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: foreground,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -111,8 +128,13 @@ class _Pill extends StatelessWidget {
 
 class _RoundIcon extends StatelessWidget {
   final IconData icon;
+  final String tooltip;
   final VoidCallback onTap;
-  const _RoundIcon({required this.icon, required this.onTap});
+  const _RoundIcon({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -128,13 +150,11 @@ class _RoundIcon extends StatelessWidget {
           ),
         ],
       ),
-      child: AppTappable(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Icon(icon, size: 20, color: const Color(0xFF111827)),
-        ),
+      child: AppIconButton(
+        tooltip: tooltip,
+        onPressed: onTap,
+        padding: const EdgeInsets.all(12),
+        icon: Icon(icon, size: 22, color: AppColors.ink),
       ),
     );
   }

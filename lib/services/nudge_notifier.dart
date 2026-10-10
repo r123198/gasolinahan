@@ -23,7 +23,7 @@ class DeviceNudgeNotifier implements NudgeNotifier {
   Future<void> init({required void Function(String stationId) onTap}) async {
     await _plugin.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('@drawable/ic_notification'),
         iOS: DarwinInitializationSettings(),
       ),
       onDidReceiveNotificationResponse: (response) {

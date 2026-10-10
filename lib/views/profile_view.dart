@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../components/app_list_tile.dart';
+import '../components/app_logo.dart';
 import '../components/app_section_header.dart';
 import '../components/app_stat_card.dart';
 import '../models/report_model.dart';
@@ -220,11 +221,15 @@ class _ProfileViewState extends State<ProfileView> {
             ),
           ),
           const SizedBox(height: 20),
-          const Center(
-            child: Text(
-              'Gasolinahan v1.0.0',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-            ),
+          const Column(
+            children: [
+              AppLogo(size: 28),
+              SizedBox(height: 6),
+              Text(
+                'Gasolinahan v1.0.0',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+              ),
+            ],
           ),
         ],
       ),

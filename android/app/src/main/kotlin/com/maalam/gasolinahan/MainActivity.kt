@@ -1,4 +1,4 @@
-package com.example.gasolinahan
+package com.maalam.gasolinahan
 
 import io.flutter.embedding.android.FlutterActivity
 

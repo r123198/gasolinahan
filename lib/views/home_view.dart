@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/app_empty_state.dart';
+import '../components/app_logo.dart';
 import '../components/app_primary_button.dart';
 import '../components/insights_card.dart';
 import '../components/fill_up_log_card.dart';
@@ -153,6 +154,8 @@ class _Header extends StatelessWidget {
         children: [
           Row(
             children: [
+              const AppLogo(size: 32),
+              const SizedBox(width: 10),
               const Expanded(
                 child: Text(
                   'Gas Tracker',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../components/app_logo.dart';
 import '../ui/adaptive/app_text_button.dart';
 import '../ui/app_theme.dart';
 
@@ -16,21 +17,7 @@ class AuthHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ExcludeSemantics(
-          child: Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: AppColors.ink,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.local_gas_station_rounded,
-              color: AppColors.go,
-              size: 30,
-            ),
-          ),
-        ),
+        const AppLogo(size: 56),
         const SizedBox(height: 24),
         Semantics(header: true, child: Text(title, style: text.headlineMedium)),
         const SizedBox(height: 8),
