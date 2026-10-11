@@ -87,8 +87,15 @@ class OfflineDatabaseService {
         whereArgs: [uid],
       );
       await txn.delete('fill_ups', where: 'ownerUid = ?', whereArgs: [uid]);
-      await txn.delete('trip_points');
-      await txn.delete('trips');
+      // The account's trips plus unowned ones (recorded before trips had an
+      // owner, so they were this phone's signed-in user's).
+      const ownTrips = 'ownerUid = ? OR ownerUid IS NULL';
+      await txn.delete(
+        'trip_points',
+        where: 'tripId IN (SELECT id FROM trips WHERE $ownTrips)',
+        whereArgs: [uid],
+      );
+      await txn.delete('trips', where: ownTrips, whereArgs: [uid]);
       await txn.delete(
         'pending_reports',
         where: 'userId = ?',
