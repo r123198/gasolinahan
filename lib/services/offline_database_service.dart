@@ -10,14 +10,34 @@ const _fillUpDetailColumns = {
   'remoteId': 'TEXT',
   'updatedAt': 'TEXT',
   'ownerUid': 'TEXT',
+  // Product (e.g. "XCS") and where it was logged; coordinates never shown.
+  'productName': 'TEXT',
+  'latitude': 'REAL',
+  'longitude': 'REAL',
+  'pointsAwarded': 'INTEGER NOT NULL DEFAULT 0',
+};
+
+/// Columns added to pending_reports later: per-product prices as JSON,
+/// e.g. {"XCS": 61.2, "Turbo Diesel": 55.1}.
+const _pendingReportColumns = {
+  'productPrices': "TEXT NOT NULL DEFAULT '{}'",
+  // Points worked out when the report was made, awarded when it syncs.
+  'pointsAwarded': 'INTEGER NOT NULL DEFAULT 0',
+  'pointsReason': "TEXT NOT NULL DEFAULT ''",
 };
 
 /// ALTER statements that bring a fill_ups table with [existingColumns] up to
 /// date. Safe to apply repeatedly: present columns are skipped.
-List<String> missingFillUpColumnStatements(Set<String> existingColumns) => [
-  for (final MapEntry(key: name, value: type) in _fillUpDetailColumns.entries)
-    if (!existingColumns.contains(name))
-      'ALTER TABLE fill_ups ADD COLUMN $name $type',
+List<String> missingFillUpColumnStatements(Set<String> existingColumns) =>
+    _missingColumns('fill_ups', _fillUpDetailColumns, existingColumns);
+
+List<String> _missingColumns(
+  String table,
+  Map<String, String> wanted,
+  Set<String> existing,
+) => [
+  for (final MapEntry(key: name, value: type) in wanted.entries)
+    if (!existing.contains(name)) 'ALTER TABLE $table ADD COLUMN $name $type',
 ];
 
 class OfflineDatabaseService {
@@ -43,9 +63,18 @@ class OfflineDatabaseService {
   }
 
   static Future<void> _ensureFillUpColumns(Database db) async {
-    final info = await db.rawQuery('PRAGMA table_info(fill_ups)');
+    await _ensureColumns(db, 'fill_ups', _fillUpDetailColumns);
+    await _ensureColumns(db, 'pending_reports', _pendingReportColumns);
+  }
+
+  static Future<void> _ensureColumns(
+    Database db,
+    String table,
+    Map<String, String> wanted,
+  ) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
     final existing = {for (final row in info) row['name'] as String};
-    for (final statement in missingFillUpColumnStatements(existing)) {
+    for (final statement in _missingColumns(table, wanted, existing)) {
       await db.execute(statement);
     }
   }
@@ -55,7 +84,7 @@ class OfflineDatabaseService {
     final path = p.join(dbPath, 'gasolinahan.db');
     return openDatabase(
       path,
-      version: 6,
+      version: 8,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await _createPendingReports(db);
@@ -70,7 +99,7 @@ class OfflineDatabaseService {
             'ALTER TABLE trips ADD COLUMN isActive INTEGER NOT NULL DEFAULT 0',
           );
         }
-        if (oldVersion < 6) await _ensureFillUpColumns(db);
+        if (oldVersion < 8) await _ensureFillUpColumns(db);
       },
     );
   }
@@ -90,7 +119,10 @@ class OfflineDatabaseService {
             longitude REAL NOT NULL,
             imagePath TEXT,
             timestamp TEXT NOT NULL,
-            synced INTEGER NOT NULL DEFAULT 0
+            synced INTEGER NOT NULL DEFAULT 0,
+            productPrices TEXT NOT NULL DEFAULT '{}',
+            pointsAwarded INTEGER NOT NULL DEFAULT 0,
+            pointsReason TEXT NOT NULL DEFAULT ''
           )
         ''');
   }
@@ -137,7 +169,11 @@ class OfflineDatabaseService {
             photoPaths TEXT NOT NULL DEFAULT '[]',
             remoteId TEXT,
             updatedAt TEXT,
-            ownerUid TEXT
+            ownerUid TEXT,
+            productName TEXT,
+            latitude REAL,
+            longitude REAL,
+            pointsAwarded INTEGER NOT NULL DEFAULT 0
           )
         ''');
   }

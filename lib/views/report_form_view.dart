@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/app_circle_button.dart';
 import '../components/app_form_error.dart';
+import '../components/report_points_card.dart';
 import '../components/app_primary_button.dart';
 import '../models/brand_registry.dart';
 import '../models/fill_up_validator.dart' show parseNumber;
@@ -36,6 +37,23 @@ class _ReportFormViewState extends State<ReportFormView> {
   String? _stationError;
   String? _formError;
   ReportPriceErrors _priceErrors = const ReportPriceErrors();
+  ProductPriceErrors _productErrors = const ProductPriceErrors();
+
+  /// One field per product of the brand (e.g. XCS, Turbo Diesel), created
+  /// on first show and prefilled from the scan.
+  final Map<String, TextEditingController> _productCtrls = {};
+  late final Map<String, double> _scannedProducts;
+
+  /// A known brand reports per product; "Other" uses the three grades.
+  bool get _usesProducts => _selectedBrand?.products.isNotEmpty ?? false;
+
+  TextEditingController _productCtrl(String product) =>
+      _productCtrls.putIfAbsent(
+        product,
+        () => TextEditingController(
+          text: _formatPrice(_scannedProducts[product] ?? 0),
+        ),
+      );
 
   /// Checks the form and stores the inline errors; true when it can submit.
   bool _validateForm() {
@@ -43,12 +61,24 @@ class _ReportFormViewState extends State<ReportFormView> {
         ? 'Choose the station brand'
         : null;
     _stationError = _selectedStation == null ? 'Choose the station' : null;
-    _priceErrors = validateReportPrices(
-      regular: _regularCtrl.text,
-      premium: _premiumCtrl.text,
-      diesel: _dieselCtrl.text,
-    );
-    return _brandError == null && _stationError == null && _priceErrors.isEmpty;
+    final brand = _selectedBrand;
+    if (brand != null && _usesProducts) {
+      _priceErrors = const ReportPriceErrors();
+      _productErrors = validateProductPrices({
+        for (final p in brand.products) p.name: _productCtrl(p.name).text,
+      });
+    } else {
+      _productErrors = const ProductPriceErrors();
+      _priceErrors = validateReportPrices(
+        regular: _regularCtrl.text,
+        premium: _premiumCtrl.text,
+        diesel: _dieselCtrl.text,
+      );
+    }
+    return _brandError == null &&
+        _stationError == null &&
+        _priceErrors.isEmpty &&
+        _productErrors.isEmpty;
   }
 
   /// After the first submit attempt, errors clear as fields get fixed.
@@ -63,6 +93,7 @@ class _ReportFormViewState extends State<ReportFormView> {
     _regularCtrl = TextEditingController(text: _formatPrice(vm.regularPrice));
     _premiumCtrl = TextEditingController(text: _formatPrice(vm.premiumPrice));
     _dieselCtrl = TextEditingController(text: _formatPrice(vm.dieselPrice));
+    _scannedProducts = vm.productPrices;
 
     // Auto-select brand from OCR detection
     _selectedBrand = vm.detectedBrand ?? BrandRegistry.findByName(vm.brand);
@@ -84,6 +115,9 @@ class _ReportFormViewState extends State<ReportFormView> {
     _regularCtrl.dispose();
     _premiumCtrl.dispose();
     _dieselCtrl.dispose();
+    for (final c in _productCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -271,41 +305,15 @@ class _ReportFormViewState extends State<ReportFormView> {
                     const SizedBox(height: 12),
                     ReportSection(
                       title: 'Prices per liter',
-                      hint: "Leave a fuel blank if the board doesn't show it.",
+                      hint: _usesProducts
+                          ? "Leave a product blank if the board doesn't "
+                                'show it.'
+                          : "Leave a fuel blank if the board doesn't show it.",
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          ReportPriceRow(
-                            grade: 'Regular',
-                            product: _productLabel(FuelCategory.regular),
-                            color: AppColors.fuelRegular,
-                            controller: _regularCtrl,
-                            error: _priceErrors.regular,
-                            action: TextInputAction.next,
-                            onChanged: _revalidate,
-                          ),
-                          const SizedBox(height: 8),
-                          ReportPriceRow(
-                            grade: 'Premium',
-                            product: _productLabel(FuelCategory.premium),
-                            color: AppColors.fuelPremium,
-                            controller: _premiumCtrl,
-                            error: _priceErrors.premium,
-                            action: TextInputAction.next,
-                            onChanged: _revalidate,
-                          ),
-                          const SizedBox(height: 8),
-                          ReportPriceRow(
-                            grade: 'Diesel',
-                            product: _productLabel(FuelCategory.diesel),
-                            color: AppColors.fuelDiesel,
-                            controller: _dieselCtrl,
-                            error: _priceErrors.diesel,
-                            action: TextInputAction.done,
-                            onChanged: _revalidate,
-                          ),
-                          FieldError(_priceErrors.general),
-                        ],
+                        children: _usesProducts
+                            ? _productRows(_selectedBrand!)
+                            : _gradeRows(),
                       ),
                     ),
                     if (vm.rawOcrText.isNotEmpty) ...[
@@ -316,29 +324,123 @@ class _ReportFormViewState extends State<ReportFormView> {
                 ),
               ),
             ),
-            Consumer<ReportViewModel>(
-              builder: (context, vm, _) {
-                final isSubmitting = vm.step == ReportStep.submitting;
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      AppFormError(message: _formError),
-                      AppPrimaryButton(
-                        label: 'Send report',
-                        isLoading: isSubmitting,
-                        trailingIcon: Icons.send_rounded,
-                        onPressed: isSubmitting ? null : () => _submit(vm),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+            _submitBar(),
           ],
         ),
       ),
+    );
+  }
+
+  /// One row per product of [brand], in the brand's order.
+  List<Widget> _productRows(BrandInfo brand) {
+    final products = brand.products;
+    return [
+      for (final (i, p) in products.indexed) ...[
+        if (i > 0) const SizedBox(height: 8),
+        ReportPriceRow(
+          title: p.name,
+          subtitle: gradeLabel(p.category),
+          color: gradeColor(p.category),
+          controller: _productCtrl(p.name),
+          error: _productErrors.byProduct[p.name],
+          action: i == products.length - 1
+              ? TextInputAction.done
+              : TextInputAction.next,
+          onChanged: _revalidate,
+        ),
+      ],
+      FieldError(_productErrors.general),
+    ];
+  }
+
+  List<Widget> _gradeRows() {
+    return [
+      ReportPriceRow(
+        title: 'Regular',
+        subtitle: _productLabel(FuelCategory.regular),
+        color: AppColors.fuelRegular,
+        controller: _regularCtrl,
+        error: _priceErrors.regular,
+        action: TextInputAction.next,
+        onChanged: _revalidate,
+      ),
+      const SizedBox(height: 8),
+      ReportPriceRow(
+        title: 'Premium',
+        subtitle: _productLabel(FuelCategory.premium),
+        color: AppColors.fuelPremium,
+        controller: _premiumCtrl,
+        error: _priceErrors.premium,
+        action: TextInputAction.next,
+        onChanged: _revalidate,
+      ),
+      const SizedBox(height: 8),
+      ReportPriceRow(
+        title: 'Diesel',
+        subtitle: _productLabel(FuelCategory.diesel),
+        color: AppColors.fuelDiesel,
+        controller: _dieselCtrl,
+        error: _priceErrors.diesel,
+        action: TextInputAction.done,
+        onChanged: _revalidate,
+      ),
+      FieldError(_priceErrors.general),
+    ];
+  }
+
+  Widget _submitBar() {
+    return Consumer<ReportViewModel>(
+      builder: (context, vm, _) {
+        final isSubmitting = vm.step == ReportStep.submitting;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_selectedStation != null) _pointsPreview(vm),
+              AppFormError(message: _formError),
+              AppPrimaryButton(
+                label: 'Send report',
+                isLoading: isSubmitting,
+                trailingIcon: Icons.send_rounded,
+                onPressed: isSubmitting ? null : () => _submit(vm),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// "Earn at least N points", refreshed as prices are typed.
+  Widget _pointsPreview(ReportViewModel vm) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        _regularCtrl,
+        _premiumCtrl,
+        _dieselCtrl,
+        ..._productCtrls.values,
+      ]),
+      builder: (context, _) {
+        final brand = _selectedBrand;
+        final products = brand != null && _usesProducts
+            ? {
+                for (final p in brand.products)
+                  p.name: parseNumber(_productCtrl(p.name).text) ?? 0.0,
+              }
+            : const <String, double>{};
+        return ReportPointsPreview(
+          estimate: vm.estimateAward(
+            stationId: _selectedStation!.id,
+            productPrices: products,
+            gradePrices: {
+              FuelCategory.regular: parseNumber(_regularCtrl.text) ?? 0,
+              FuelCategory.premium: parseNumber(_premiumCtrl.text) ?? 0,
+              FuelCategory.diesel: parseNumber(_dieselCtrl.text) ?? 0,
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -354,11 +456,21 @@ class _ReportFormViewState extends State<ReportFormView> {
     });
     if (!isValid) return;
 
-    vm.setRegularPrice(parseNumber(_regularCtrl.text) ?? 0.0);
-    vm.setPremiumPrice(parseNumber(_premiumCtrl.text) ?? 0.0);
-    vm.setDieselPrice(parseNumber(_dieselCtrl.text) ?? 0.0);
     // "Other" keeps whatever brand the station itself has.
     vm.setBrand(_selectedBrand?.name ?? _selectedStation!.brand);
+    final brand = _selectedBrand;
+    if (brand != null && _usesProducts) {
+      // Grade prices are derived from the products.
+      vm.setProductPrices({
+        for (final p in brand.products)
+          p.name: parseNumber(_productCtrl(p.name).text) ?? 0,
+      }, brand: brand);
+    } else {
+      vm.setProductPrices(const {});
+      vm.setRegularPrice(parseNumber(_regularCtrl.text) ?? 0.0);
+      vm.setPremiumPrice(parseNumber(_premiumCtrl.text) ?? 0.0);
+      vm.setDieselPrice(parseNumber(_dieselCtrl.text) ?? 0.0);
+    }
     vm.setStationId(_selectedStation!.id);
     vm.setStationName(_selectedStation!.name);
 

@@ -22,6 +22,10 @@ void main() {
       'ALTER TABLE fill_ups ADD COLUMN remoteId TEXT',
       'ALTER TABLE fill_ups ADD COLUMN updatedAt TEXT',
       'ALTER TABLE fill_ups ADD COLUMN ownerUid TEXT',
+      'ALTER TABLE fill_ups ADD COLUMN productName TEXT',
+      'ALTER TABLE fill_ups ADD COLUMN latitude REAL',
+      'ALTER TABLE fill_ups ADD COLUMN longitude REAL',
+      'ALTER TABLE fill_ups ADD COLUMN pointsAwarded INTEGER NOT NULL DEFAULT 0',
     ]);
   });
 
@@ -34,6 +38,10 @@ void main() {
         'remoteId',
         'updatedAt',
         'ownerUid',
+        'productName',
+        'latitude',
+        'longitude',
+        'pointsAwarded',
       }),
       ["ALTER TABLE fill_ups ADD COLUMN photoPaths TEXT NOT NULL DEFAULT '[]'"],
     );
@@ -49,6 +57,10 @@ void main() {
         'remoteId',
         'updatedAt',
         'ownerUid',
+        'productName',
+        'latitude',
+        'longitude',
+        'pointsAwarded',
       }),
       isEmpty,
     );

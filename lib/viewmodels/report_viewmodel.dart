@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -7,6 +8,9 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:image_picker/image_picker.dart';
 import 'package:location/location.dart';
 import '../models/brand_registry.dart';
+import '../models/points_rules.dart';
+import '../models/price_board_parser.dart';
+import '../models/report_points_context.dart';
 import '../models/station_model.dart';
 import '../services/firebase_service.dart';
 import '../services/offline_database_service.dart';
@@ -31,10 +35,21 @@ class ReportViewModel extends ChangeNotifier {
   DateTime? _lastSubmission;
   static const _minSubmitInterval = Duration(minutes: 2);
 
+  /// Loading the user's report history mustn't hold up a submit for long.
+  static const _historyTimeout = Duration(seconds: 5);
+  static const _historyLimit = 60;
+
+  /// Points earned by the last submitted report (for the success screen).
+  PointsAward? _lastAward;
+
   // OCR results
   double _regularPrice = 0.0;
   double _premiumPrice = 0.0;
   double _dieselPrice = 0.0;
+
+  /// Price per product of the brand (e.g. {"XCS": 61.2}); empty for an
+  /// unknown brand, where only the three grade prices are used.
+  Map<String, double> _productPrices = const {};
   String _rawOcrText = '';
 
   // Location
@@ -62,6 +77,7 @@ class ReportViewModel extends ChangeNotifier {
   double get regularPrice => _regularPrice;
   double get premiumPrice => _premiumPrice;
   double get dieselPrice => _dieselPrice;
+  Map<String, double> get productPrices => _productPrices;
   String get rawOcrText => _rawOcrText;
   double get latitude => _latitude;
   double get longitude => _longitude;
@@ -73,6 +89,7 @@ class ReportViewModel extends ChangeNotifier {
   Map<String, double> get stationDistances => _stationDistances;
   StationModel? get matchedStation => _matchedStation;
   BrandInfo? get detectedBrand => _detectedBrand;
+  PointsAward? get lastAward => _lastAward;
   bool get isNearStation =>
       _matchedStation != null &&
       (_stationDistances[_matchedStation!.id] ?? double.infinity) <= 200;
@@ -90,6 +107,22 @@ class ReportViewModel extends ChangeNotifier {
 
   void setDieselPrice(double v) {
     _dieselPrice = v;
+    notifyListeners();
+  }
+
+  /// Replaces the per-product prices (0 or less drops a product) and, for a
+  /// known [brand], derives each grade price from its first priced product.
+  void setProductPrices(Map<String, double> prices, {BrandInfo? brand}) {
+    _productPrices = Map.unmodifiable({
+      for (final MapEntry(:key, :value) in prices.entries)
+        if (value > 0) key: value,
+    });
+    if (brand != null && _productPrices.isNotEmpty) {
+      final grades = gradesFromProducts(brand, _productPrices);
+      _regularPrice = grades[FuelCategory.regular] ?? 0;
+      _premiumPrice = grades[FuelCategory.premium] ?? 0;
+      _dieselPrice = grades[FuelCategory.diesel] ?? 0;
+    }
     notifyListeners();
   }
 
@@ -309,6 +342,7 @@ class ReportViewModel extends ChangeNotifier {
       _regularPrice = 0.0;
       _premiumPrice = 0.0;
       _dieselPrice = 0.0;
+      _productPrices = const {};
       _detectedBrand = BrandRegistry.detectFromOcr(recognizedText.text);
       if (_detectedBrand != null) {
         _brand = _detectedBrand!.name;
@@ -322,7 +356,16 @@ class ReportViewModel extends ChangeNotifier {
         );
       }
 
-      _parseOcrPrices(recognizedText);
+      final board = parsePriceBoard([
+        for (final block in recognizedText.blocks) block.text,
+      ], brand: _detectedBrand);
+      _regularPrice = board.regular;
+      _premiumPrice = board.premium;
+      _dieselPrice = board.diesel;
+      final brand = _detectedBrand;
+      if (brand != null) {
+        _productPrices = Map.unmodifiable(productPricesForForm(brand, board));
+      }
 
       // After parsing, require at least one valid price was extracted
       if (_regularPrice == 0 && _premiumPrice == 0 && _dieselPrice == 0) {
@@ -367,106 +410,6 @@ class ReportViewModel extends ChangeNotifier {
     // OR at least 1 fuel keyword AND at least 2 valid prices
     return (keywordHits >= _minKeywordMatches && validPriceCount >= 1) ||
         (keywordHits >= 1 && validPriceCount >= 2);
-  }
-
-  void _parseOcrPrices(RecognizedText recognized) {
-    final pricePattern = RegExp(r'(\d{2,3})[.,](\d{2})');
-
-    // Build keyword lists — brand-specific product names + generic fallbacks
-    final regularKw = <String>['regular', 'unleaded', '87', 'ron 91'];
-    final premiumKw = <String>[
-      'premium',
-      'super',
-      '93',
-      '95',
-      '97',
-      'ron 95',
-      'ron 97',
-    ];
-    final dieselKw = <String>['diesel', 'dsl'];
-
-    // Add brand-specific product names if brand was detected
-    if (_detectedBrand != null) {
-      for (final p in _detectedBrand!.products) {
-        final name = p.name.toLowerCase();
-        final target = switch (p.category) {
-          FuelCategory.regular => regularKw,
-          FuelCategory.premium => premiumKw,
-          FuelCategory.diesel => dieselKw,
-        };
-        target.add(name);
-        // Also add individual significant words
-        for (final word in name.split(' ')) {
-          if (word.length > 2 && !const {'euro', 'per', 'new'}.contains(word)) {
-            target.add(word);
-          }
-        }
-      }
-    } else {
-      // No brand detected — add all known product names
-      for (final entry in BrandRegistry.productKeywords.entries) {
-        final target = switch (entry.value) {
-          FuelCategory.regular => regularKw,
-          FuelCategory.premium => premiumKw,
-          FuelCategory.diesel => dieselKw,
-        };
-        target.add(entry.key);
-      }
-    }
-
-    // Try to match prices to fuel types using text blocks (keyword-based)
-    for (final block in recognized.blocks) {
-      final blockText = block.text.toLowerCase();
-      final blockPrices = <double>[];
-      for (final match in pricePattern.allMatches(blockText)) {
-        final whole = int.tryParse(match.group(1)!) ?? 0;
-        final decimal = int.tryParse(match.group(2)!) ?? 0;
-        final price = whole + decimal / 100.0;
-        if (price >= 30 && price <= 150) {
-          blockPrices.add(price);
-        }
-      }
-
-      if (blockPrices.isEmpty) continue;
-
-      final p = blockPrices.first;
-      if (_containsAny(blockText, regularKw)) {
-        _regularPrice = p;
-      } else if (_containsAny(blockText, premiumKw)) {
-        _premiumPrice = p;
-      } else if (_containsAny(blockText, dieselKw)) {
-        _dieselPrice = p;
-      }
-    }
-
-    // Positional fallback — only if keyword matching found nothing
-    if (_regularPrice == 0 && _premiumPrice == 0 && _dieselPrice == 0) {
-      final allText = recognized.text.toLowerCase();
-      final prices = <double>[];
-      for (final match in pricePattern.allMatches(allText)) {
-        final whole = int.tryParse(match.group(1)!) ?? 0;
-        final decimal = int.tryParse(match.group(2)!) ?? 0;
-        final price = whole + decimal / 100.0;
-        if (price >= 30 && price <= 150) {
-          prices.add(price);
-        }
-      }
-      if (prices.length >= 2) {
-        prices.sort();
-        if (prices.length == 2) {
-          _regularPrice = prices[0];
-          _premiumPrice = prices[1];
-        } else {
-          _dieselPrice = prices[0];
-          _regularPrice = prices[1];
-          _premiumPrice = prices[2];
-        }
-      }
-    }
-  }
-
-  bool _containsAny(String text, List<String> keywords) {
-    return keywords.any((k) => text.contains(k));
   }
 
   Future<void> _getLocation() async {
@@ -582,7 +525,12 @@ class ReportViewModel extends ChangeNotifier {
       return 'At least one fuel price is required.';
     }
     // Prices must be in valid Philippine range
-    for (final p in [_regularPrice, _premiumPrice, _dieselPrice]) {
+    for (final p in [
+      _regularPrice,
+      _premiumPrice,
+      _dieselPrice,
+      ..._productPrices.values,
+    ]) {
       if (p > 0 && (p < 30 || p > 150)) {
         return 'Prices must be between ₱30 and ₱150 per liter.';
       }
@@ -624,6 +572,14 @@ class ReportViewModel extends ChangeNotifier {
               .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
               .replaceAll(RegExp(r'^_|_$'), '');
 
+    final context = buildReportContext(
+      _pointsInput(sid, now, history: await _loadHistory()),
+    );
+    final award = pointsForReport(context);
+    _lastAward = award;
+    final points = award.isPending ? 0 : award.points;
+    final reason = describeAward(context);
+
     // Try Firebase first, fall back to offline on any failure
     try {
       final success = await _firebaseService.submitPriceReport(
@@ -635,6 +591,10 @@ class ReportViewModel extends ChangeNotifier {
         brand: _brand,
         latitude: _latitude,
         longitude: _longitude,
+        productPrices: _productPrices,
+        pointsAwarded: points,
+        pointsReason: reason,
+        isPending: award.isPending,
       );
       if (!success) throw Exception('No authenticated user');
 
@@ -646,7 +606,7 @@ class ReportViewModel extends ChangeNotifier {
       // Firebase failed — save offline instead
       if (kDebugMode) print('Firebase submit failed, saving offline: $e');
       try {
-        await _saveOffline(now);
+        await _saveOffline(now, points: points, reason: reason);
         _lastSubmission = DateTime.now();
         _savedOffline = true;
         _step = ReportStep.idle;
@@ -661,7 +621,94 @@ class ReportViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> _saveOffline(DateTime now) async {
+  /// Rough award for the form's "earn up to" hint: what's known locally,
+  /// without the user's history (streak and first-report bonuses).
+  PointsAward estimateAward({
+    required String stationId,
+    required Map<String, double> productPrices,
+    required Map<FuelCategory, double> gradePrices,
+  }) {
+    final input = _pointsInput(
+      stationId,
+      DateTime.now(),
+      history: null,
+      productPrices: productPrices,
+      gradePrices: gradePrices,
+    );
+    return pointsForReport(buildReportContext(input));
+  }
+
+  ReportPointsInput _pointsInput(
+    String stationId,
+    DateTime now, {
+    required List<PastReport>? history,
+    Map<String, double>? productPrices,
+    Map<FuelCategory, double>? gradePrices,
+  }) {
+    final existing = _nearbyStations
+        .where((s) => s.id == stationId)
+        .firstOrNull;
+    Map<FuelCategory, double> gradesOf(StationModel s) => {
+      FuelCategory.regular: s.regularPrice,
+      FuelCategory.premium: s.premiumPrice,
+      FuelCategory.diesel: s.dieselPrice,
+    };
+    return ReportPointsInput(
+      stationId: stationId,
+      productPrices: productPrices ?? _productPrices,
+      gradePrices:
+          gradePrices ??
+          {
+            FuelCategory.regular: _regularPrice,
+            FuelCategory.premium: _premiumPrice,
+            FuelCategory.diesel: _dieselPrice,
+          },
+      hasPhoto: _imagePath != null,
+      userLat: _latitude,
+      userLng: _longitude,
+      existingStation: existing == null
+          ? null
+          : ReportedStationInfo(
+              latitude: existing.latitude,
+              longitude: existing.longitude,
+              lastUpdated: existing.lastUpdated,
+            ),
+      nearbyGradePrices: [
+        for (final s in _nearbyStations)
+          if (s.id != stationId) gradesOf(s),
+      ],
+      history: history,
+      now: now,
+    );
+  }
+
+  /// The user's earlier reports, or null when signed out / unreachable.
+  Future<List<PastReport>?> _loadHistory() async {
+    final uid = _firebaseService.currentAuthUser?.uid;
+    if (uid == null) return null;
+    try {
+      final reports = await _firebaseService
+          .getUserReports(uid, limit: _historyLimit)
+          .timeout(_historyTimeout);
+      return [
+        for (final r in reports)
+          PastReport(
+            stationId: r.stationId,
+            timestamp: r.timestamp,
+            pointsAwarded: r.pointsAwarded,
+          ),
+      ];
+    } on Exception catch (e) {
+      if (kDebugMode) print('Report history unavailable: $e');
+      return null;
+    }
+  }
+
+  Future<void> _saveOffline(
+    DateTime now, {
+    required int points,
+    required String reason,
+  }) async {
     await _offlineDb.insertPendingReport({
       'userId': '',
       'stationId': _stationId.isEmpty
@@ -677,6 +724,9 @@ class ReportViewModel extends ChangeNotifier {
       'imagePath': _imagePath,
       'timestamp': now.toIso8601String(),
       'synced': 0,
+      'productPrices': jsonEncode(_productPrices),
+      'pointsAwarded': points,
+      'pointsReason': reason,
     });
   }
 
@@ -693,6 +743,7 @@ class ReportViewModel extends ChangeNotifier {
     _regularPrice = 0.0;
     _premiumPrice = 0.0;
     _dieselPrice = 0.0;
+    _productPrices = const {};
     _rawOcrText = '';
     _latitude = 0.0;
     _longitude = 0.0;
@@ -704,6 +755,7 @@ class ReportViewModel extends ChangeNotifier {
     _nearbyStations = [];
     _stationDistances = {};
     _matchedStation = null;
+    _lastAward = null;
     // Note: _lastSubmission is intentionally NOT reset — persists across reports
     notifyListeners();
   }

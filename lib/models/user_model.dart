@@ -7,6 +7,9 @@ class UserModel {
   final String subscriptionTier;
   final int reportsCount;
   final int points;
+
+  /// Every point ever earned (spending won't lower it); decides the tier.
+  final int lifetimePoints;
   final double amountSaved;
 
   UserModel({
@@ -18,8 +21,9 @@ class UserModel {
     required this.subscriptionTier,
     required this.reportsCount,
     required this.points,
+    int? lifetimePoints,
     required this.amountSaved,
-  });
+  }) : lifetimePoints = lifetimePoints ?? points;
 
   factory UserModel.fromMap(Map<String, dynamic> data, String id) {
     return UserModel(
@@ -31,6 +35,7 @@ class UserModel {
       subscriptionTier: data['subscriptionTier'] ?? 'GASOLINAHAN FREE',
       reportsCount: data['reportsCount'] ?? 0,
       points: data['points'] ?? 0,
+      lifetimePoints: data['lifetimePoints'] as int?,
       amountSaved: (data['amountSaved'] ?? 0.0).toDouble(),
     );
   }
@@ -44,6 +49,7 @@ class UserModel {
       'subscriptionTier': subscriptionTier,
       'reportsCount': reportsCount,
       'points': points,
+      'lifetimePoints': lifetimePoints,
       'amountSaved': amountSaved,
     };
   }
@@ -66,6 +72,7 @@ class UserModel {
       subscriptionTier: subscriptionTier ?? this.subscriptionTier,
       reportsCount: reportsCount ?? this.reportsCount,
       points: points ?? this.points,
+      lifetimePoints: lifetimePoints,
       amountSaved: amountSaved ?? this.amountSaved,
     );
   }

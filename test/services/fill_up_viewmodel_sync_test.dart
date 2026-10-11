@@ -68,14 +68,21 @@ FillUp fill({double odo = 1000, String? remoteId, String? owner}) => FillUp(
 void main() {
   late MemoryFillUpService local;
   late FakeRemote remote;
+  late List<(String, int, String)> awards;
   String? uid;
 
-  FillUpViewModel vm() =>
-      FillUpViewModel(service: local, remote: remote, currentUserId: () => uid);
+  FillUpViewModel vm() => FillUpViewModel(
+    service: local,
+    remote: remote,
+    currentUserId: () => uid,
+    awardPoints: (uid, points, reason, source) async =>
+        awards.add((uid, points, reason)),
+  );
 
   setUp(() {
     local = MemoryFillUpService();
     remote = FakeRemote();
+    awards = [];
     uid = 'me';
   });
 
@@ -147,5 +154,37 @@ void main() {
     final model = vm();
     await model.load();
     expect(model.fillUps, isEmpty);
+  });
+
+  group('points', () {
+    test('the first fill-up earns its points plus the head start', () async {
+      final model = vm();
+      await model.add(fill());
+      await pumpEventQueue();
+
+      // 1 logged + 2 first fill-up (no product, so not "complete").
+      expect(model.lastAward?.points, 3);
+      expect(awards.single.$2, 3);
+      expect(local.rows.values.single.pointsAwarded, 3);
+    });
+
+    test('deleting a fill-up takes its points back', () async {
+      final model = vm();
+      await model.add(fill());
+      await pumpEventQueue();
+      await model.remove(model.fillUps.single);
+      await pumpEventQueue();
+
+      expect(awards.map((a) => a.$2), [3, -3]);
+    });
+
+    test('signed out: no points', () async {
+      uid = null;
+      final model = vm();
+      await model.add(fill());
+      await pumpEventQueue();
+      expect(awards, isEmpty);
+      expect(model.lastAward, isNull);
+    });
   });
 }

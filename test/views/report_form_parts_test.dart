@@ -59,7 +59,7 @@ void main() {
     expect(cleared, 1);
   });
 
-  testWidgets('price row shows the grade in its pump colour and errors', (
+  testWidgets('product row shows the product in its grade colour', (
     tester,
   ) async {
     final controller = TextEditingController();
@@ -67,8 +67,8 @@ void main() {
     await tester.pumpWidget(
       host(
         ReportPriceRow(
-          grade: 'Diesel',
-          product: 'Turbo Diesel',
+          title: 'Turbo Diesel',
+          subtitle: 'Diesel',
           color: AppColors.fuelDiesel,
           controller: controller,
           action: TextInputAction.done,
@@ -77,9 +77,9 @@ void main() {
         ),
       ),
     );
-    final grade = tester.widget<Text>(find.text('Diesel'));
-    expect(grade.style?.color, AppColors.fuelDiesel);
-    expect(find.text('Turbo Diesel'), findsOneWidget);
+    final title = tester.widget<Text>(find.text('Turbo Diesel'));
+    expect(title.style?.color, AppColors.fuelDiesel);
+    expect(find.text('Diesel'), findsOneWidget);
     expect(find.text('Should be ₱30–₱150'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '62.5.0');
     expect(controller.text, isNot('62.5.0'));

@@ -9,6 +9,17 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
 
+      // Why points changed. Append-only from the app; awards themselves
+      // must move server-side before points can be redeemed.
+      match /points_ledger/{entryId} {
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        allow create: if isSignedIn() && request.auth.uid == uid
+                      && request.resource.data.points is int
+                      && request.resource.data.points >= -50
+                      && request.resource.data.points <= 50;
+        allow update, delete: if false;
+      }
+
       // Fill-up log, synced across the owner's devices.
       match /fill_ups/{fillUpId} {
         allow read, delete: if isSignedIn() && request.auth.uid == uid;

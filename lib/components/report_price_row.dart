@@ -1,16 +1,31 @@
 import 'package:flutter/cupertino.dart' show CupertinoTextField;
 import 'package:flutter/material.dart';
 
+import '../models/brand_registry.dart';
 import '../ui/adaptive/app_platform.dart';
 import '../ui/app_theme.dart';
 import '../ui/number_input_formatter.dart';
 import '../views/fill_up_form_parts.dart' show FieldError;
 
-/// One fuel grade's price input: grade name in its pump colour, product
-/// name under it, and a right-aligned ₱ field.
+/// Pump colour for a fuel grade (Regular blue, Premium red, Diesel green).
+Color gradeColor(FuelCategory grade) => switch (grade) {
+  FuelCategory.regular => AppColors.fuelRegular,
+  FuelCategory.premium => AppColors.fuelPremium,
+  FuelCategory.diesel => AppColors.fuelDiesel,
+};
+
+String gradeLabel(FuelCategory grade) => switch (grade) {
+  FuelCategory.regular => 'Regular',
+  FuelCategory.premium => 'Premium',
+  FuelCategory.diesel => 'Diesel',
+};
+
+/// One price input: [title] (a product like "Turbo Diesel", or a grade) in
+/// its grade's pump colour, [subtitle] under it (the grade, or the brand's
+/// product for a grade row), and a right-aligned ₱ field.
 class ReportPriceRow extends StatelessWidget {
-  final String grade;
-  final String product;
+  final String title;
+  final String subtitle;
   final Color color;
   final TextEditingController controller;
   final String? error;
@@ -19,8 +34,8 @@ class ReportPriceRow extends StatelessWidget {
 
   const ReportPriceRow({
     super.key,
-    required this.grade,
-    required this.product,
+    required this.title,
+    required this.subtitle,
     required this.color,
     required this.controller,
     required this.action,
@@ -81,7 +96,9 @@ class ReportPriceRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Semantics(
-          label: '$grade, $product, price in pesos',
+          label: title == subtitle
+              ? '$title, price in pesos'
+              : '$title, $subtitle, price in pesos',
           textField: true,
           child: Container(
             constraints: const BoxConstraints(minHeight: 56),
@@ -103,16 +120,16 @@ class ReportPriceRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        grade,
+                        title,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: color,
                         ),
                       ),
-                      if (product != grade)
+                      if (subtitle != title)
                         Text(
-                          product,
+                          subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

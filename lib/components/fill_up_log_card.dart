@@ -155,7 +155,10 @@ class _Header extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        _FuelPill(fuelType: fill.fuelType),
+                        _FuelPill(
+                          fuelType: fill.fuelType,
+                          productName: fill.productName,
+                        ),
                       ],
                     ),
                   ),
@@ -191,11 +194,13 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// Grade pill in the colours used on PH pumps.
+/// Product (or grade) pill in the grade's PH pump colour: "XCS" in
+/// Regular blue, "Turbo Diesel" in Diesel green.
 class _FuelPill extends StatelessWidget {
   final String fuelType;
+  final String? productName;
 
-  const _FuelPill({required this.fuelType});
+  const _FuelPill({required this.fuelType, this.productName});
 
   @override
   Widget build(BuildContext context) {
@@ -204,6 +209,7 @@ class _FuelPill extends StatelessWidget {
       'diesel' => ('Diesel', AppColors.fuelDiesel, AppColors.goTint),
       _ => ('Regular', AppColors.fuelRegular, const Color(0xFFDBEAFE)),
     };
+    final product = productName?.trim() ?? '';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
@@ -211,7 +217,10 @@ class _FuelPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label,
+        product.isEmpty ? label : product,
+        semanticsLabel: product.isEmpty ? label : '$product, $label',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,

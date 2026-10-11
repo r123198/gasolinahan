@@ -30,6 +30,17 @@ class FillUp {
   /// sign-in scoping, which the next signed-in user claims.
   final String? ownerUid;
 
+  /// The brand's product, e.g. "XCS" or "Turbo Diesel"; [fuelType] is its
+  /// grade. Null when only the grade was picked.
+  final String? productName;
+
+  /// Where it was logged (captured automatically, never displayed).
+  final double? latitude;
+  final double? longitude;
+
+  /// Points this fill-up earned; taken back if it's deleted.
+  final int pointsAwarded;
+
   const FillUp({
     this.id,
     required this.stationId,
@@ -46,6 +57,10 @@ class FillUp {
     this.remoteId,
     this.updatedAt,
     this.ownerUid,
+    this.productName,
+    this.latitude,
+    this.longitude,
+    this.pointsAwarded = 0,
   });
 
   FillUp copyWith({
@@ -54,6 +69,7 @@ class FillUp {
     String? remoteId,
     DateTime? updatedAt,
     String? ownerUid,
+    int? pointsAwarded,
   }) => FillUp(
     id: id ?? this.id,
     stationId: stationId,
@@ -70,6 +86,10 @@ class FillUp {
     remoteId: remoteId ?? this.remoteId,
     updatedAt: updatedAt ?? this.updatedAt,
     ownerUid: ownerUid ?? this.ownerUid,
+    productName: productName,
+    latitude: latitude,
+    longitude: longitude,
+    pointsAwarded: pointsAwarded ?? this.pointsAwarded,
   );
 
   /// Price per liter as entered, or worked out from amount and liters.
@@ -101,6 +121,10 @@ class FillUp {
       remoteId: map['remoteId'] as String?,
       updatedAt: _parseDate(map['updatedAt']),
       ownerUid: map['ownerUid'] as String?,
+      productName: map['productName'] as String?,
+      latitude: (map['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble(),
+      pointsAwarded: (map['pointsAwarded'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -126,6 +150,10 @@ class FillUp {
     'timestamp': timestamp.toIso8601String(),
     'notes': notes,
     'updatedAt': (updatedAt ?? timestamp).toIso8601String(),
+    'productName': productName,
+    'latitude': latitude,
+    'longitude': longitude,
+    'pointsAwarded': pointsAwarded,
   };
 
   static DateTime? _parseDate(Object? value) =>
@@ -148,6 +176,10 @@ class FillUp {
       'remoteId': remoteId,
       'updatedAt': updatedAt?.toIso8601String(),
       'ownerUid': ownerUid,
+      'productName': productName,
+      'latitude': latitude,
+      'longitude': longitude,
+      'pointsAwarded': pointsAwarded,
     };
   }
 }

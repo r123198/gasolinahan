@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../models/brand_registry.dart';
-import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_tappable.dart';
 import '../ui/app_theme.dart';
 
@@ -122,101 +119,6 @@ class StationChips extends StatelessWidget {
   }
 }
 
-/// Thumbnails of attached photos with remove buttons and an add tile.
-class PhotoStrip extends StatelessWidget {
-  final List<String> paths;
-  final int max;
-  final VoidCallback onAdd;
-  final ValueChanged<String> onRemove;
-
-  const PhotoStrip({
-    super.key,
-    required this.paths,
-    required this.max,
-    required this.onAdd,
-    required this.onRemove,
-  });
-
-  static const _size = 72.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final (i, path) in paths.indexed)
-          SizedBox.square(
-            dimension: _size,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.file(
-                    File(path),
-                    fit: BoxFit.cover,
-                    cacheWidth: 216,
-                    semanticLabel: 'Photo ${i + 1}',
-                  ),
-                ),
-                Positioned(
-                  top: -10,
-                  right: -10,
-                  child: AppIconButton(
-                    tooltip: 'Remove photo ${i + 1}',
-                    onPressed: () => onRemove(path),
-                    icon: const CircleAvatar(
-                      radius: 11,
-                      backgroundColor: AppColors.ink,
-                      child: Icon(Icons.close, size: 14, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (paths.length < max)
-          Semantics(
-            button: true,
-            label: 'Add photo',
-            onTap: onAdd,
-            excludeSemantics: true,
-            child: AppTappable(
-              onTap: onAdd,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: _size,
-                height: _size,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.outline),
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.add_a_photo_outlined,
-                      color: AppColors.textMuted,
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Add',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 /// Scrollable row of PH fuel brands as round logo buttons, with "Other"
 /// at the end for independent stations.
 class BrandChips extends StatelessWidget {
@@ -325,6 +227,51 @@ class _BrandChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The selected brand's own products (XCS, Turbo Diesel, …) as one-tap
+/// chips; picking one also sets the grade, shown in its pump colour.
+class ProductChips extends StatelessWidget {
+  final List<FuelProduct> products;
+  final FuelProduct? selected;
+  final ValueChanged<FuelProduct> onSelected;
+
+  const ProductChips({
+    super.key,
+    required this.products,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  static (String, Color) gradeOf(FuelCategory c) => switch (c) {
+    FuelCategory.regular => ('Regular', AppColors.fuelRegular),
+    FuelCategory.premium => ('Premium', AppColors.fuelPremium),
+    FuelCategory.diesel => ('Diesel', AppColors.fuelDiesel),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final p in products)
+          Builder(
+            builder: (context) {
+              final (grade, color) = gradeOf(p.category);
+              return ChoiceChip(
+                avatar: CircleAvatar(radius: 5, backgroundColor: color),
+                label: Text('${p.name} · $grade'),
+                tooltip: '${p.name}, $grade',
+                selected: p.name == selected?.name,
+                showCheckmark: false,
+                onSelected: (_) => onSelected(p),
+              );
+            },
+          ),
+      ],
     );
   }
 }

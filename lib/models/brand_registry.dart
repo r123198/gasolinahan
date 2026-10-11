@@ -61,6 +61,12 @@ class BrandInfo {
     );
   }
 
+  /// The product called [name] (case-insensitive), if this brand sells it.
+  FuelProduct? productNamed(String name) {
+    final lower = name.trim().toLowerCase();
+    return products.where((p) => p.name.toLowerCase() == lower).firstOrNull;
+  }
+
   /// Get fuel products by category
   List<FuelProduct> byCategory(FuelCategory cat) =>
       products.where((p) => p.category == cat).toList();

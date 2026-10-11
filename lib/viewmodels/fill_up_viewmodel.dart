@@ -4,31 +4,55 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/fill_up_log.dart';
 import '../models/fill_up_model.dart';
+import '../models/fill_up_points.dart';
 import '../models/fill_up_sync.dart';
+import '../models/points_rules.dart';
 import '../models/station_summary.dart';
 import '../services/fill_up_photo_store.dart';
 import '../services/fill_up_remote.dart';
+import '../services/firebase_service.dart';
 import '../services/fill_up_service.dart';
 
 /// The fill-up log. Reads and writes go to the on-device database first, so
 /// the app works offline; signed-in users' changes are also mirrored to the
 /// cloud (see [FillUpRemote]) and merged back in on [load], so the log
 /// follows them to other phones.
+/// Adds (or takes back, when negative) points for [uid].
+typedef PointsAwarder =
+    Future<void> Function(String uid, int points, String reason, String source);
+
 class FillUpViewModel extends ChangeNotifier {
   final FillUpService _service;
   final FillUpPhotoStore _photos;
   final FillUpRemote? _injectedRemote;
   final String? Function() _currentUserId;
+  final PointsAwarder? _injectedAwarder;
 
   FillUpViewModel({
     FillUpService? service,
     FillUpPhotoStore? photos,
     FillUpRemote? remote,
     String? Function()? currentUserId,
+    PointsAwarder? awardPoints,
   }) : _service = service ?? FillUpService(),
        _photos = photos ?? FillUpPhotoStore(),
        _injectedRemote = remote,
-       _currentUserId = currentUserId ?? _firebaseUserId;
+       _currentUserId = currentUserId ?? _firebaseUserId,
+       _injectedAwarder = awardPoints;
+
+  PointsAwarder get _awardPoints =>
+      _injectedAwarder ??
+      (uid, points, reason, source) => FirebaseService().awardPoints(
+        uid,
+        points,
+        reason: reason,
+        source: source,
+      );
+
+  PointsAward? _lastAward;
+
+  /// What the most recent [add] earned (null when signed out).
+  PointsAward? get lastAward => _lastAward;
 
   static String? _firebaseUserId() {
     try {
@@ -136,6 +160,23 @@ class FillUpViewModel extends ChangeNotifier {
     updatedAt: touch ? DateTime.now() : (f.updatedAt ?? f.timestamp),
   );
 
+  static String _describe(PointsAward award) =>
+      award.lines.map((l) => '${l.label} +${l.points}').join(', ');
+
+  void _grant(String uid, int points, String reason, String? remoteId) {
+    if (points == 0) return;
+    unawaited(
+      _awardPoints(
+        uid,
+        points,
+        reason,
+        'fill-up:${remoteId ?? 'local'}',
+      ).catchError((Object e) {
+        if (kDebugMode) print('Points award failed: $e');
+      }),
+    );
+  }
+
   /// Queues the upload without waiting: offline, Firestore holds it until
   /// the connection is back.
   void _send(String uid, FillUp f) {
@@ -149,12 +190,23 @@ class FillUpViewModel extends ChangeNotifier {
   /// Returns true when the fill-up was saved.
   Future<bool> add(FillUp fillUp) async {
     final uid = _currentUserId();
+    _lastAward = null;
     try {
-      final toSave = uid == null
+      var toSave = uid == null
           ? fillUp.copyWith(updatedAt: DateTime.now())
           : _stamped(fillUp, uid);
+      final award = uid == null
+          ? null
+          : pointsForFillUp(
+              fillUpPointsContext(newFill: toSave, history: _fillUps),
+            );
+      if (award != null) toSave = toSave.copyWith(pointsAwarded: award.points);
       final id = await _service.insert(toSave);
       if (uid != null) _send(uid, toSave.copyWith(id: id));
+      if (uid != null && award != null) {
+        _lastAward = award;
+        _grant(uid, award.points, _describe(award), toSave.remoteId);
+      }
       _fillUps = await _service.getAll(ownerUid: uid);
       _errorMessage = null;
       notifyListeners();
@@ -209,6 +261,10 @@ class FillUpViewModel extends ChangeNotifier {
       await _photos.discard(fillUp.photoPaths);
       final uid = _currentUserId();
       final remoteId = fillUp.remoteId;
+      if (uid != null && fillUp.pointsAwarded > 0) {
+        // Deleting returns the points, so add-and-delete can't farm them.
+        _grant(uid, -fillUp.pointsAwarded, 'Fill-up deleted', remoteId);
+      }
       if (uid != null && remoteId != null) {
         unawaited(
           _remote.delete(uid, remoteId).catchError((Object e) {

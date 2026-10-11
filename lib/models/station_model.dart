@@ -12,6 +12,10 @@ class StationModel {
   final double dieselPrice;
   final DateTime lastUpdated;
 
+  /// Latest reported price per product, e.g. {"XCS": 61.2}; grades only
+  /// (the three fields above) for stations reported before products.
+  final Map<String, double> productPrices;
+
   StationModel({
     required this.id,
     required this.name,
@@ -23,6 +27,7 @@ class StationModel {
     required this.premiumPrice,
     required this.dieselPrice,
     required this.lastUpdated,
+    this.productPrices = const {},
   });
 
   /// Name to show: the saved name, else "Shell station" (brand + station),
@@ -50,6 +55,7 @@ class StationModel {
       premiumPrice: (data['premiumPrice'] ?? 0.0).toDouble(),
       dieselPrice: (data['dieselPrice'] ?? 0.0).toDouble(),
       lastUpdated: _parseDateTime(data['lastUpdated']),
+      productPrices: _parseProductPrices(data['productPrices']),
     );
   }
 
@@ -64,7 +70,16 @@ class StationModel {
       'premiumPrice': premiumPrice,
       'dieselPrice': dieselPrice,
       'lastUpdated': Timestamp.fromDate(lastUpdated),
+      'productPrices': productPrices,
     };
+  }
+
+  static Map<String, double> _parseProductPrices(Object? value) {
+    if (value is! Map) return const {};
+    return Map.unmodifiable({
+      for (final MapEntry(:key, :value) in value.entries)
+        if (key is String && value is num && value > 0) key: value.toDouble(),
+    });
   }
 
   static DateTime _parseDateTime(dynamic value) {

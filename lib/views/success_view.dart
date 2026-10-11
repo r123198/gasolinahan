@@ -3,8 +3,12 @@ import 'package:provider/provider.dart';
 import '../components/app_logo.dart';
 import '../components/app_primary_button.dart';
 import '../components/brand_logo.dart';
+import '../components/report_points_card.dart';
+import '../components/report_price_row.dart' show gradeColor;
+import '../models/brand_registry.dart';
 import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/report_viewmodel.dart';
 
 class SuccessView extends StatelessWidget {
@@ -19,11 +23,20 @@ class SuccessView extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = context.read<ReportViewModel>();
     final station = vm.stationName.isNotEmpty ? vm.stationName : 'Station';
-    final prices = [
-      ('Regular', vm.regularPrice, AppColors.fuelRegular),
-      ('Premium', vm.premiumPrice, AppColors.fuelPremium),
-      ('Diesel', vm.dieselPrice, AppColors.fuelDiesel),
-    ].where((p) => p.$2 > 0).toList();
+    final brand = BrandRegistry.findByName(vm.brand);
+    // Each product reported (e.g. XCS, Turbo Diesel), in the brand's order;
+    // the three grades when the brand's products aren't known.
+    final prices = brand != null && vm.productPrices.isNotEmpty
+        ? [
+            for (final p in brand.products)
+              if (vm.productPrices[p.name] case final price?)
+                (p.name, price, gradeColor(p.category)),
+          ]
+        : [
+            ('Regular', vm.regularPrice, AppColors.fuelRegular),
+            ('Premium', vm.premiumPrice, AppColors.fuelPremium),
+            ('Diesel', vm.dieselPrice, AppColors.fuelDiesel),
+          ].where((p) => p.$2 > 0).toList();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -56,7 +69,18 @@ class SuccessView extends StatelessWidget {
                       color: AppColors.textMuted,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  if (vm.lastAward case final award?) ...[
+                    const SizedBox(height: 24),
+                    ReportPointsCard(
+                      award: award,
+                      savedOffline: vm.savedOffline,
+                      lifetimeBefore: context
+                          .read<AuthViewModel>()
+                          .currentUser
+                          ?.lifetimePoints,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(

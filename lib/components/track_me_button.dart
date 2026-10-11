@@ -25,16 +25,21 @@ class TrackMeButton extends StatelessWidget {
     return Consumer<TripViewModel>(
       builder: (context, vm, _) {
         return Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _Pill(
-              isActive: vm.isTracking,
-              label: vm.isTracking
-                  ? 'Tracking · ${formatKmShort(vm.liveDistanceKm)} · Stop'
-                  : 'Track me',
-              icon: vm.isTracking
-                  ? Icons.stop_circle_rounded
-                  : Icons.navigation_rounded,
-              onTap: () => _toggle(context, vm),
+            // Shrinks (label ends in "…") instead of pushing the history
+            // button off-screen when the live label is long.
+            Flexible(
+              child: _Pill(
+                isActive: vm.isTracking,
+                label: vm.isTracking
+                    ? 'Tracking · ${formatKmShort(vm.liveDistanceKm)} · Stop'
+                    : 'Track me',
+                icon: vm.isTracking
+                    ? Icons.stop_circle_rounded
+                    : Icons.navigation_rounded,
+                onTap: () => _toggle(context, vm),
+              ),
             ),
             const SizedBox(width: 8),
             _RoundIcon(

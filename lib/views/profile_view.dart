@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../components/app_list_tile.dart';
 import '../components/app_logo.dart';
+import '../components/points_tier_card.dart';
 import '../components/app_section_header.dart';
 import '../components/app_stat_card.dart';
 import '../models/report_model.dart';
@@ -153,6 +154,11 @@ class _ProfileViewState extends State<ProfileView> {
           _ProfileCard(user: user, onEditPhoto: _pickProfileImage),
           const SizedBox(height: 12),
           _StatsRow(user: user),
+          const SizedBox(height: 12),
+          PointsTierCard(
+            points: user?.points ?? 0,
+            lifetimePoints: user?.lifetimePoints ?? 0,
+          ),
           const SizedBox(height: 28),
           AppSectionHeader(
             title: 'Recent reports',

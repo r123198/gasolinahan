@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../components/app_primary_button.dart';
 import '../models/brand_registry.dart';
@@ -8,7 +7,6 @@ import '../models/fill_up_validator.dart';
 import '../models/station_naming.dart';
 import '../models/station_model.dart';
 import '../models/station_summary.dart';
-import '../services/fill_up_photo_store.dart';
 import '../services/odometer_scanner.dart';
 import '../ui/adaptive/app_dialog.dart';
 import '../ui/adaptive/app_icon_button.dart';
@@ -23,9 +21,11 @@ import '../ui/tracker_format.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import 'fill_up_form_parts.dart';
+import 'fill_up_location.dart';
+
+part 'fill_up_form_helpers.dart';
 
 const _maxStationChips = 5;
-const _photoMaxWidth = 1600.0;
 const _fuelLabels = {
   FuelType.regular: 'Regular',
   FuelType.premium: 'Premium',
@@ -74,8 +74,6 @@ class _FillUpFormState extends State<_FillUpForm> {
   final _odometerCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   final _scanner = OdometerScanner();
-  final _photoStore = FillUpPhotoStore();
-  final _picker = ImagePicker();
 
   late final List<StationChoice> _choices;
 
@@ -87,12 +85,27 @@ class _FillUpFormState extends State<_FillUpForm> {
   bool _typedOther = false;
   FuelType _fuel = FuelType.regular;
   late DateTime _date;
+
+  /// Photo capture is hidden for now; photos already on an edited
+  /// fill-up are carried through unchanged.
   List<String> _photos = [];
 
-  /// Photos copied in during this session; deleted again if not saved.
-  final Set<String> _addedPhotos = {};
   bool _showNotes = false;
   bool _priceEditedByUser = false;
+
+  /// The brand's product (XCS, Turbo Diesel…); sets [_fuel] when picked.
+  FuelProduct? _product;
+
+  /// Captured silently as the form opens; saved, never shown.
+  double? _latitude;
+  double? _longitude;
+  bool _locating = false;
+
+  /// Area name from OpenStreetMap, used for the branch once a brand is set.
+  String? _suggestedArea;
+
+  /// The branch text we filled in, so the hint only shows until it's edited.
+  String? _autoBranch;
   bool _isDirty = false;
   bool _isSaving = false;
   bool _isScanning = false;
@@ -134,6 +147,9 @@ class _FillUpFormState extends State<_FillUpForm> {
             : branchOf(editing.stationName, _brand!);
       }
       _fuel = FuelType.values.asNameMap()[editing.fuelType] ?? FuelType.regular;
+      _product = _highlightedBrand?.productNamed(editing.productName ?? '');
+      _latitude = editing.latitude;
+      _longitude = editing.longitude;
       _date = editing.timestamp;
       _amountCtrl.text = editing.amountSpent.toStringAsFixed(2);
       _priceCtrl.text =
@@ -156,7 +172,9 @@ class _FillUpFormState extends State<_FillUpForm> {
           FuelType.values.asNameMap()[lastFuel] ??
           context.read<DashboardViewModel>().fuelType;
       _date = DateTime.now();
+      _product = _defaultProduct(_highlightedBrand);
       _prefillPrice();
+      _locate();
     }
     for (final c in [
       _nameCtrl,
@@ -183,26 +201,6 @@ class _FillUpFormState extends State<_FillUpForm> {
     super.dispose();
   }
 
-  /// Recent stations first (where people usually refill), then nearby ones.
-  List<StationChoice> _buildChoices() {
-    final seen = <StationChoice>{};
-    // summarize() already orders stations by most recent visit.
-    final recent = context.read<FillUpViewModel>().summaries;
-    final nearby = context.read<DashboardViewModel>().nearbyStations;
-    return [
-      for (final s in recent)
-        if (seen.add(StationChoice(s.stationId, s.stationName, s.brand)))
-          StationChoice(s.stationId, s.stationName, s.brand),
-      for (final s in nearby)
-        // Stations saved without a name come back as "Unknown Station";
-        // the brand logos below are the better way to pick those.
-        if (s.name.trim().isNotEmpty &&
-            s.name != 'Unknown Station' &&
-            seen.add(StationChoice(s.id, s.name, s.brand)))
-          StationChoice(s.id, s.name, s.brand),
-    ];
-  }
-
   void _onEdited() {
     _isDirty = true;
     // Once the user has tried to save, keep errors in step with typing.
@@ -213,58 +211,15 @@ class _FillUpFormState extends State<_FillUpForm> {
     }
   }
 
-  /// Fills price per liter from the station's reported price, else the last
-  /// price paid there, unless the user has typed their own.
-  void _prefillPrice() {
-    if (_priceEditedByUser) return;
-    final station = _station;
-    final brand = _brand;
-    double? price;
-    if (brand != null) price = _nearbyPriceForBrand(brand);
-    if (station != null && station.id.isNotEmpty) {
-      final reported = context
-          .read<DashboardViewModel>()
-          .nearbyStations
-          .where((s) => s.id == station.id)
-          .map(
-            (s) => switch (_fuel) {
-              FuelType.regular => s.regularPrice,
-              FuelType.premium => s.premiumPrice,
-              FuelType.diesel => s.dieselPrice,
-            },
-          )
-          .firstOrNull;
-      price = (reported != null && reported > 0)
-          ? reported
-          : context.read<FillUpViewModel>().lastPriceAt(station.id, _fuel.name);
-    }
-    final text = price?.toStringAsFixed(2) ?? '';
-    if (_priceCtrl.text != text) {
-      _priceCtrl.removeListener(_onEdited);
-      _priceCtrl.text = text;
-      _priceCtrl.addListener(_onEdited);
-    }
-  }
-
-  /// A nearby station of [brand] that has a reported price for this fuel.
-  double? _nearbyPriceForBrand(BrandInfo brand) {
-    for (final s in context.read<DashboardViewModel>().nearbyStations) {
-      final match = BrandRegistry.match(s.brand, stationName: s.name);
-      if (match?.name != brand.name) continue;
-      final price = switch (_fuel) {
-        FuelType.regular => s.regularPrice,
-        FuelType.premium => s.premiumPrice,
-        FuelType.diesel => s.dieselPrice,
-      };
-      if (price > 0) return price;
-    }
-    return null;
-  }
-
   void _changeStation(VoidCallback change) {
     setState(() {
       change();
       _isDirty = true;
+      final brand = _highlightedBrand;
+      if (_product == null || brand?.productNamed(_product!.name) == null) {
+        _product = _defaultProduct(brand);
+      }
+      _fillBranchFromArea();
       _prefillPrice();
       if (_submitted) _errors = _validate();
     });
@@ -296,6 +251,54 @@ class _FillUpFormState extends State<_FillUpForm> {
       selected: _station,
     );
     if (picked != null && mounted) _selectStation(picked);
+  }
+
+  void _selectProduct(FuelProduct product) {
+    setState(() {
+      _product = product;
+      _fuel = FuelType.values.byName(product.category.name);
+      _isDirty = true;
+      _prefillPrice();
+    });
+  }
+
+  /// Finds the user and fills in the station they're at, unless they've
+  /// already chosen one.
+  Future<void> _locate() async {
+    setState(() => _locating = true);
+    final guess = await guessFillUpLocation(
+      reportedStations: context.read<DashboardViewModel>().nearbyStations,
+    );
+    if (!mounted) return;
+    setState(() => _locating = false);
+    if (guess == null) return;
+    _latitude = guess.latitude;
+    _longitude = guess.longitude;
+    final alreadyChosen = _station != null || _brand != null || _typedOther;
+    // Our own suggestions aren't the user's edits: closing an untouched
+    // form shouldn't ask to discard anything.
+    final wasDirty = _isDirty;
+
+    final reported = guess.reportedStation;
+    final choice = reported == null
+        ? null
+        : _choices.where((c) => c.id == reported.id).firstOrNull;
+    final place = guess.place;
+    _suggestedArea = place?.area;
+    if (alreadyChosen) {
+      setState(_fillBranchFromArea);
+    } else if (choice != null) {
+      _selectStation(choice);
+    } else if (place?.brand case final brand?) {
+      _suggestedArea = place!.branchOrArea;
+      _selectBrand(brand);
+    } else if (place?.stationName case final name?) {
+      _selectOther();
+      _setAutoBranch(name);
+    } else {
+      setState(_fillBranchFromArea);
+    }
+    if (!wasDirty) setState(() => _isDirty = false);
   }
 
   void _selectFuel(FuelType fuel) {
@@ -352,59 +355,6 @@ class _FillUpFormState extends State<_FillUpForm> {
       case OdometerScanStatus.cancelled:
         break;
     }
-  }
-
-  Future<void> _addPhotos() async {
-    final source = await showAppActionSheet<ImageSource>(
-      context: context,
-      actions: const [
-        AppSheetAction(
-          label: 'Take a photo',
-          value: ImageSource.camera,
-          icon: Icons.photo_camera_outlined,
-        ),
-        AppSheetAction(
-          label: 'Choose from gallery',
-          value: ImageSource.gallery,
-          icon: Icons.photo_library_outlined,
-        ),
-      ],
-    );
-    if (source == null) return;
-    final room = maxPhotosPerFill - _photos.length;
-    // pickMultiImage rejects a limit below 2.
-    final picked = source == ImageSource.camera || room < 2
-        ? [
-            ?await _picker.pickImage(
-              source: source,
-              imageQuality: 70,
-              maxWidth: _photoMaxWidth,
-            ),
-          ]
-        : await _picker.pickMultiImage(
-            imageQuality: 70,
-            maxWidth: _photoMaxWidth,
-            limit: room,
-          );
-    if (picked.isEmpty || !mounted) return;
-    final kept = <String>[];
-    for (final file in picked.take(room)) {
-      kept.add(await _photoStore.keep(file.path));
-    }
-    if (!mounted) return;
-    setState(() {
-      _addedPhotos.addAll(kept);
-      _photos = [..._photos, ...kept];
-      _isDirty = true;
-    });
-  }
-
-  void _removePhoto(String path) {
-    setState(() {
-      _photos = _photos.where((p) => p != path).toList();
-      _isDirty = true;
-    });
-    if (_addedPhotos.remove(path)) _photoStore.discard([path]);
   }
 
   FillUpDraft get _draft => FillUpDraft(
@@ -465,6 +415,9 @@ class _FillUpFormState extends State<_FillUpForm> {
       timestamp: _date,
       notes: draft.notes,
       photoPaths: List.unmodifiable(_photos),
+      productName: _product?.name,
+      latitude: _latitude,
+      longitude: _longitude,
     );
     final editing = widget.editing;
     final saved = editing == null
@@ -481,16 +434,23 @@ class _FillUpFormState extends State<_FillUpForm> {
       showAppToast(context, vm.errorMessage ?? 'Could not save.');
       return;
     }
-    _addedPhotos.clear(); // now owned by the saved fill-up
-    showAppToast(context, _isEditing ? 'Changes saved' : 'Fill-up saved');
+    showAppToast(context, _isEditing ? 'Changes saved' : _savedMessage(vm));
     navigator.pop();
   }
 
-  Future<void> _onPopInvoked(bool didPop, Object? result) async {
-    if (didPop) {
-      _photoStore.discard(_addedPhotos);
-      return;
+  /// "Fill-up saved · +2 points", or why it earned none.
+  static String _savedMessage(FillUpViewModel vm) {
+    final award = vm.lastAward;
+    if (award == null) return 'Fill-up saved';
+    if (award.points > 0) {
+      return 'Fill-up saved · +${award.points} '
+          '${award.points == 1 ? 'point' : 'points'}';
     }
+    return 'Fill-up saved · ${award.reason ?? 'no points this time'}';
+  }
+
+  Future<void> _onPopInvoked(bool didPop, Object? result) async {
+    if (didPop) return;
     final discard = await showAppConfirmDialog(
       context: context,
       title: _isEditing ? 'Discard changes?' : 'Discard this fill-up?',
@@ -549,6 +509,23 @@ class _FillUpFormState extends State<_FillUpForm> {
             ),
             FieldError(_errors.date),
             const SizedBox(height: 16),
+            if (_locating)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    AppSpinner(size: 14, strokeWidth: 2),
+                    SizedBox(width: 8),
+                    Text(
+                      'Finding the station you\'re at…',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (chips.isNotEmpty) ...[
               const FormLabel('Recent & nearby'),
               StationChips(
@@ -580,7 +557,12 @@ class _FillUpFormState extends State<_FillUpForm> {
                   labelText: 'Branch or area (optional)',
                   hintText: 'e.g. Mayapa',
                   helperText:
-                      'Saved as "${composeStationName(brand, _nameCtrl.text)}"',
+                      _autoBranch != null && _nameCtrl.text == _autoBranch
+                      ? 'Filled in from your location · saved as '
+                            '"${composeStationName(brand, _nameCtrl.text)}"'
+                      : 'Saved as '
+                            '"${composeStationName(brand, _nameCtrl.text)}"',
+                  helperMaxLines: 2,
                 ),
               ),
             ] else if (_typedOther) ...[
@@ -600,15 +582,23 @@ class _FillUpFormState extends State<_FillUpForm> {
               FieldError(_errors.station),
             const SizedBox(height: 20),
             const FormLabel('Fuel'),
-            SegmentedButton<FuelType>(
-              segments: [
-                for (final f in FuelType.values)
-                  ButtonSegment(value: f, label: Text(_fuelLabels[f]!)),
-              ],
-              selected: {_fuel},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => _selectFuel(s.first),
-            ),
+            if (_highlightedBrand?.products case final products?
+                when products.isNotEmpty)
+              ProductChips(
+                products: products,
+                selected: _product,
+                onSelected: _selectProduct,
+              )
+            else
+              SegmentedButton<FuelType>(
+                segments: [
+                  for (final f in FuelType.values)
+                    ButtonSegment(value: f, label: Text(_fuelLabels[f]!)),
+                ],
+                selected: {_fuel},
+                showSelectedIcon: false,
+                onSelectionChanged: (s) => _selectFuel(s.first),
+              ),
             const SizedBox(height: 20),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -697,14 +687,6 @@ class _FillUpFormState extends State<_FillUpForm> {
                   style: TextButton.styleFrom(foregroundColor: AppColors.ink),
                 ),
               ),
-            const SizedBox(height: 12),
-            const FormLabel('Photos (optional)'),
-            PhotoStrip(
-              paths: _photos,
-              max: maxPhotosPerFill,
-              onAdd: _addPhotos,
-              onRemove: _removePhoto,
-            ),
             const SizedBox(height: 24),
             AppPrimaryButton(
               label: _isEditing ? 'Save changes' : 'Save fill-up',
@@ -713,44 +695,6 @@ class _FillUpFormState extends State<_FillUpForm> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _numberField({
-    required TextEditingController controller,
-    required String label,
-    String? prefix,
-    String? suffixText,
-    String? error,
-    String? helper,
-    bool decimal = true,
-    bool autofocus = false,
-    TextInputAction action = TextInputAction.next,
-    Widget? suffixIcon,
-    ValueChanged<String>? onChanged,
-  }) {
-    return TextField(
-      controller: controller,
-      autofocus: autofocus,
-      keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-      textInputAction: action,
-      onChanged: onChanged,
-      onSubmitted: action == TextInputAction.done ? (_) => _save() : null,
-      inputFormatters: [numberInputFormatter(decimal: decimal)],
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-        fontFeatures: [FontFeature.tabularFigures()],
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        prefixText: prefix,
-        suffixText: suffixText,
-        suffixIcon: suffixIcon,
-        errorText: error,
-        errorMaxLines: 3,
-        helperText: helper,
       ),
     );
   }

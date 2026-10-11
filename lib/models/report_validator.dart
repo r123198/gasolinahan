@@ -49,3 +49,27 @@ String? _priceError(String text) {
   }
   return null;
 }
+
+/// Errors for the per-product price rows (keyed by product name).
+class ProductPriceErrors {
+  final Map<String, String> byProduct;
+  final String? general;
+
+  const ProductPriceErrors({this.byProduct = const {}, this.general});
+
+  bool get isEmpty => byProduct.isEmpty && general == null;
+}
+
+/// Like [validateReportPrices] for a brand's products: blanks are fine
+/// (not on the board), but at least one price is needed.
+ProductPriceErrors validateProductPrices(Map<String, String> texts) {
+  if (texts.values.every((t) => t.trim().isEmpty)) {
+    return const ProductPriceErrors(general: 'Enter at least one price');
+  }
+  return ProductPriceErrors(
+    byProduct: {
+      for (final MapEntry(:key, :value) in texts.entries)
+        key: ?_priceError(value),
+    },
+  );
+}

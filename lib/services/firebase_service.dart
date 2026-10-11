@@ -52,6 +52,31 @@ class FirebaseService {
     await _auth.signOut();
   }
 
+  /// Adds (or, when negative, takes back) points and records why in
+  /// users/{uid}/points_ledger, so every point can be audited later.
+  /// Offline, Firestore queues both writes.
+  Future<void> awardPoints(
+    String uid,
+    int points, {
+    required String reason,
+    required String source,
+  }) async {
+    if (points == 0) return;
+    final user = _firestore.collection('users').doc(uid);
+    final batch = _firestore.batch()
+      ..set(user, {
+        'points': FieldValue.increment(points),
+        'lifetimePoints': FieldValue.increment(points),
+      }, SetOptions(merge: true))
+      ..set(user.collection('points_ledger').doc(), {
+        'points': points,
+        'reason': reason,
+        'source': source,
+        'at': FieldValue.serverTimestamp(),
+      });
+    await batch.commit();
+  }
+
   Future<void> sendPasswordReset(String email) =>
       _auth.sendPasswordResetEmail(email: email.trim());
 
@@ -233,24 +258,32 @@ class FirebaseService {
     String address = '',
     double latitude = 0.0,
     double longitude = 0.0,
+    Map<String, double> productPrices = const {},
+    int pointsAwarded = 0,
+    String pointsReason = '',
+    bool isPending = false,
   }) async {
     final authUser = _auth.currentUser;
     if (authUser == null) {
       if (kDebugMode) print('submitPriceReport: No auth user');
       return false;
     }
+    final points = isPending ? 0 : pointsAwarded;
 
     try {
       // Step 1: Create report document
-      await _firestore.collection('reports').add({
+      final reportRef = await _firestore.collection('reports').add({
         'userId': authUser.uid,
         'stationId': stationId,
         'reportedRegularPrice': regular,
         'reportedPremiumPrice': premium,
         'reportedDieselPrice': diesel,
+        'reportedProductPrices': productPrices,
         'timestamp': FieldValue.serverTimestamp(),
-        'pointsAwarded': 50,
-        'status': 'pending',
+        'pointsAwarded': points,
+        'pointsReason': pointsReason,
+        // Unusual prices wait for review (and their points with them).
+        'status': isPending ? 'pending' : 'accepted',
       });
       if (kDebugMode) print('submitPriceReport: Report doc created');
 
@@ -266,6 +299,11 @@ class FirebaseService {
       if (address.isNotEmpty) stationData['address'] = address;
       if (latitude != 0) stationData['latitude'] = latitude;
       if (longitude != 0) stationData['longitude'] = longitude;
+      // set(merge: true) merges nested maps, so products missing from this
+      // report keep their last price.
+      if (productPrices.isNotEmpty) {
+        stationData['productPrices'] = productPrices;
+      }
 
       await _firestore
           .collection('stations')
@@ -273,11 +311,16 @@ class FirebaseService {
           .set(stationData, SetOptions(merge: true));
       if (kDebugMode) print('submitPriceReport: Station doc updated');
 
-      // Step 3: Award points — use set+merge so it works even if fields don't exist yet
+      // Step 3: Count the report and award its points (see points_rules).
       await _firestore.collection('users').doc(authUser.uid).set({
-        'points': FieldValue.increment(50),
         'reportsCount': FieldValue.increment(1),
       }, SetOptions(merge: true));
+      await awardPoints(
+        authUser.uid,
+        points,
+        reason: pointsReason,
+        source: 'report:${reportRef.id}',
+      );
       if (kDebugMode) print('submitPriceReport: User points updated');
 
       return true;
