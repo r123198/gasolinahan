@@ -83,6 +83,9 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # `flutter run` without --flavor builds dev; store builds pass
+  # --flavor prod (see docs/build-flavors.md).
+  default-flavor: dev
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

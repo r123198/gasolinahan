@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 import 'fill_up_model.dart';
-import 'station_summary.dart';
 import 'trip_model.dart';
 
 /// What the user's fill-ups and recorded trips say about their driving costs.
@@ -59,23 +58,24 @@ class FuelInsights {
         .where((t) => t.startedAt.isAfter(last.timestamp))
         .fold(0.0, (sum, t) => sum + t.distanceKm);
 
+    // Full-tank method: the fuel burned over a gap is what the fill-up at
+    // its end put back in, matching the log and analytics screens.
     final gaps = <double>[];
     var litersWithGap = 0.0;
     var kmWithLiters = 0.0;
+    var spent = 0.0;
     for (var i = 0; i + 1 < ordered.length; i++) {
       final gap = ordered[i + 1].odometerKm - ordered[i].odometerKm;
       if (gap <= 0) continue;
       gaps.add(gap);
-      final liters = ordered[i].liters;
+      spent += ordered[i + 1].amountSpent;
+      final liters = ordered[i + 1].liters;
       if (liters != null && liters > 0) {
         litersWithGap += liters;
         kmWithLiters += gap;
       }
     }
-
-    final summaries = StationSummary.summarize(fillUps);
-    final spent = summaries.fold(0.0, (s, x) => s + x.spentWithKnownKm);
-    final km = summaries.fold(0.0, (s, x) => s + x.kmDriven);
+    final km = gaps.fold(0.0, (s, g) => s + g);
 
     final litersEntered = fillUps
         .map((f) => f.liters)

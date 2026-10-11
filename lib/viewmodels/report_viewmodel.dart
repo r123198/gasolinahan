@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:exif/exif.dart';
 import 'package:flutter/foundation.dart';
@@ -10,9 +10,12 @@ import 'package:location/location.dart';
 import '../models/brand_registry.dart';
 import '../models/points_rules.dart';
 import '../models/price_board_parser.dart';
+import '../models/report_matching.dart';
 import '../models/report_points_context.dart';
+import '../models/report_upload.dart';
 import '../models/station_model.dart';
 import '../services/firebase_service.dart';
+import '../services/geo.dart';
 import '../services/offline_database_service.dart';
 import '../services/sync_service.dart';
 
@@ -38,6 +41,13 @@ class ReportViewModel extends ChangeNotifier {
   /// Loading the user's report history mustn't hold up a submit for long.
   static const _historyTimeout = Duration(seconds: 5);
   static const _historyLimit = 60;
+
+  /// A GPS fix that never comes mustn't leave the scan spinning.
+  static const _locationTimeout = Duration(seconds: 15);
+
+  /// The user's earlier reports (sent and queued), loaded as the form
+  /// opens for the points preview; null when unknown.
+  List<PastReport>? _history;
 
   /// Points earned by the last submitted report (for the success screen).
   PointsAward? _lastAward;
@@ -221,6 +231,7 @@ class ReportViewModel extends ChangeNotifier {
     _statusMessage = 'Finding nearby stations...';
     notifyListeners();
     await _matchNearbyStations();
+    _history = await _loadHistory();
 
     // Step 2c: Must be near at least one station
     if (_nearbyStations.isEmpty && _latitude != 0 && _longitude != 0) {
@@ -309,28 +320,6 @@ class ReportViewModel extends ChangeNotifier {
     return size;
   }
 
-  /// Keywords that indicate a fuel price board
-  static const _fuelKeywords = [
-    // Fuel types
-    'regular', 'unleaded', 'premium', 'super', 'diesel', 'dsl',
-    'gasoline', 'gasolin', 'gasolina', 'kerosene',
-    // Octane ratings
-    'ron', '87', '91', '93', '95', '97',
-    'octane',
-    // Brands & product names
-    'v-power', 'vpower', 'xcs', 'blaze', 'turbo', 'xtreme',
-    'fuel', 'petrol',
-    // Board context
-    'price', 'prices', 'presyo', 'per liter', 'per litre', '/l',
-    'pump', 'station',
-    // Philippine brands
-    'shell', 'petron', 'caltex', 'seaoil', 'unioil', 'phoenix',
-    'total', 'ptt', 'jetti', 'cleanfuel', 'flying v',
-  ];
-
-  /// Minimum number of fuel keywords that must appear to consider it a price board
-  static const _minKeywordMatches = 2;
-
   Future<void> _runOcr(String imagePath) async {
     final inputImage = InputImage.fromFilePath(imagePath);
     final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
@@ -349,7 +338,7 @@ class ReportViewModel extends ChangeNotifier {
       }
 
       // Validate this looks like a fuel price board before parsing
-      if (!_looksLikePriceBoard(recognizedText.text)) {
+      if (!looksLikePriceBoard(recognizedText.text)) {
         throw Exception(
           'This doesn\'t look like a fuel price board. '
           'Please take a clear photo of the station\'s price display.',
@@ -379,39 +368,6 @@ class ReportViewModel extends ChangeNotifier {
     }
   }
 
-  /// Check if the OCR text contains enough fuel-related keywords to be a price board
-  bool _looksLikePriceBoard(String rawText) {
-    final text = rawText.toLowerCase();
-
-    // Count how many fuel keywords appear
-    int keywordHits = 0;
-    final matched = <String>{};
-    for (final kw in _fuelKeywords) {
-      if (text.contains(kw) && !matched.contains(kw)) {
-        matched.add(kw);
-        keywordHits++;
-      }
-    }
-
-    // Also check for price-like patterns (XX.XX or XX,XX in the 30-150 range)
-    final pricePattern = RegExp(r'(\d{2,3})[.,](\d{2})');
-    final priceMatches = pricePattern.allMatches(text);
-    int validPriceCount = 0;
-    for (final match in priceMatches) {
-      final whole = int.tryParse(match.group(1)!) ?? 0;
-      final decimal = int.tryParse(match.group(2)!) ?? 0;
-      final price = whole + decimal / 100.0;
-      if (price >= 30 && price <= 150) {
-        validPriceCount++;
-      }
-    }
-
-    // Must have at least 2 fuel keywords AND at least 1 valid price
-    // OR at least 1 fuel keyword AND at least 2 valid prices
-    return (keywordHits >= _minKeywordMatches && validPriceCount >= 1) ||
-        (keywordHits >= 1 && validPriceCount >= 2);
-  }
-
   Future<void> _getLocation() async {
     bool serviceEnabled = await _location.serviceEnabled();
     if (!serviceEnabled) {
@@ -428,7 +384,7 @@ class ReportViewModel extends ChangeNotifier {
       }
     }
 
-    final loc = await _location.getLocation();
+    final loc = await _location.getLocation().timeout(_locationTimeout);
     _latitude = loc.latitude ?? 0.0;
     _longitude = loc.longitude ?? 0.0;
   }
@@ -437,13 +393,16 @@ class ReportViewModel extends ChangeNotifier {
     if (_latitude == 0 && _longitude == 0) return;
 
     try {
-      final allStations = await _firebaseService.getNearbyStations();
+      final allStations = await _firebaseService.getStationsNear(
+        _latitude,
+        _longitude,
+      );
 
       // Calculate distance to each station
       _stationDistances = {};
       for (final s in allStations) {
         if (s.latitude != 0 || s.longitude != 0) {
-          _stationDistances[s.id] = _haversineMeters(
+          _stationDistances[s.id] = haversineMeters(
             _latitude,
             _longitude,
             s.latitude,
@@ -465,43 +424,25 @@ class ReportViewModel extends ChangeNotifier {
           .where((s) => (_stationDistances[s.id] ?? double.infinity) <= 5000)
           .toList();
 
-      // Auto-select the closest station if within 200m
-      if (_nearbyStations.isNotEmpty) {
-        final closest = _nearbyStations.first;
-        final dist = _stationDistances[closest.id] ?? double.infinity;
-        if (dist <= 200) {
-          _matchedStation = closest;
-          _stationId = closest.id;
-          _stationName = closest.name;
-          _brand = closest.brand;
-        }
+      // Auto-select the closest station within 200m whose brand fits the
+      // board: a Petron board next to a closer Shell is the Petron.
+      final closest = _nearbyStations
+          .where(
+            (s) =>
+                (_stationDistances[s.id] ?? double.infinity) <= 200 &&
+                brandFits(_detectedBrand, s),
+          )
+          .firstOrNull;
+      if (closest != null) {
+        _matchedStation = closest;
+        _stationId = closest.id;
+        _stationName = closest.name;
+        if (_detectedBrand == null) _brand = closest.brand;
       }
     } catch (e) {
       if (kDebugMode) print('Station matching error: $e');
     }
   }
-
-  /// Haversine formula: distance in meters between two lat/lng points
-  static double _haversineMeters(
-    double lat1,
-    double lon1,
-    double lat2,
-    double lon2,
-  ) {
-    const R = 6371000.0; // Earth radius in meters
-    final dLat = _toRad(lat2 - lat1);
-    final dLon = _toRad(lon2 - lon1);
-    final a =
-        math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_toRad(lat1)) *
-            math.cos(_toRad(lat2)) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    return R * c;
-  }
-
-  static double _toRad(double deg) => deg * math.pi / 180;
 
   /// Format distance for display
   static String formatDistance(double meters) {
@@ -564,65 +505,75 @@ class ReportViewModel extends ChangeNotifier {
 
     final now = DateTime.now();
     // Generate a clean station ID from the name, or use existing
-    final sid = _stationId.isNotEmpty
+    final slug = _stationId.isNotEmpty
         ? _stationId
         : _stationName
               .trim()
               .toLowerCase()
               .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
               .replaceAll(RegExp(r'^_|_$'), '');
+    // A name with no latin letters slugs to nothing; doc('') would throw.
+    final sid = slug.isEmpty
+        ? 'manual_report_${now.millisecondsSinceEpoch}'
+        : slug;
 
+    final uid = _firebaseService.currentAuthUser?.uid;
+    if (uid == null) {
+      _errorMessage = 'You are signed out. Sign in to send reports.';
+      _step = ReportStep.form;
+      notifyListeners();
+      return false;
+    }
+
+    final history = await _loadHistory() ?? _history;
     final context = buildReportContext(
-      _pointsInput(sid, now, history: await _loadHistory()),
+      _pointsInput(sid, now, history: history),
     );
     final award = pointsForReport(context);
     _lastAward = award;
-    final points = award.isPending ? 0 : award.points;
-    final reason = describeAward(context);
+    final upload = ReportUpload(
+      reportId: _firebaseService.newReportId(),
+      userId: uid,
+      stationId: sid,
+      stationName: _stationName,
+      brand: _brand,
+      latitude: _latitude,
+      longitude: _longitude,
+      regularPrice: _regularPrice,
+      premiumPrice: _premiumPrice,
+      dieselPrice: _dieselPrice,
+      productPrices: _productPrices,
+      timestamp: now,
+      points: award.points,
+      pointsReason: describeAward(context),
+      isPending: award.isPending,
+    );
 
-    // Try Firebase first, fall back to offline on any failure
+    // Offline, or Firebase failing / too slow: queue it under the same
+    // report id (see ReportWriter) and let SyncService send it later.
     try {
-      final success = await _firebaseService.submitPriceReport(
-        sid,
-        _regularPrice,
-        _premiumPrice,
-        diesel: _dieselPrice,
-        stationName: _stationName,
-        brand: _brand,
-        latitude: _latitude,
-        longitude: _longitude,
-        productPrices: _productPrices,
-        pointsAwarded: points,
-        pointsReason: reason,
-        isPending: award.isPending,
-      );
-      if (!success) throw Exception('No authenticated user');
-
-      _lastSubmission = DateTime.now();
-      _step = ReportStep.idle;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      // Firebase failed — save offline instead
-      if (kDebugMode) print('Firebase submit failed, saving offline: $e');
+      await _firebaseService.submitPriceReport(upload);
+    } on Exception catch (e) {
+      if (kDebugMode) print('Report not sent, saving offline: $e');
       try {
-        await _saveOffline(now, points: points, reason: reason);
-        _lastSubmission = DateTime.now();
+        await _saveOffline(upload);
         _savedOffline = true;
-        _step = ReportStep.idle;
-        notifyListeners();
-        return true;
-      } catch (offlineError) {
+      } on Exception catch (offlineError) {
         _errorMessage = 'Could not save report: $offlineError';
         _step = ReportStep.form;
         notifyListeners();
         return false;
       }
     }
+    _history = [...?history, upload.toPastReport()];
+    _lastSubmission = DateTime.now();
+    _step = ReportStep.idle;
+    notifyListeners();
+    return true;
   }
 
-  /// Rough award for the form's "earn up to" hint: what's known locally,
-  /// without the user's history (streak and first-report bonuses).
+  /// Award for the form's points hint, using the history loaded as the
+  /// form opened (so daily limits and already-rewarded stations apply).
   PointsAward estimateAward({
     required String stationId,
     required Map<String, double> productPrices,
@@ -631,7 +582,7 @@ class ReportViewModel extends ChangeNotifier {
     final input = _pointsInput(
       stationId,
       DateTime.now(),
-      history: null,
+      history: _history,
       productPrices: productPrices,
       gradePrices: gradePrices,
     );
@@ -682,7 +633,8 @@ class ReportViewModel extends ChangeNotifier {
     );
   }
 
-  /// The user's earlier reports, or null when signed out / unreachable.
+  /// The user's earlier reports, sent and still queued on this phone, or
+  /// null when signed out / unreachable.
   Future<List<PastReport>?> _loadHistory() async {
     final uid = _firebaseService.currentAuthUser?.uid;
     if (uid == null) return null;
@@ -690,43 +642,33 @@ class ReportViewModel extends ChangeNotifier {
       final reports = await _firebaseService
           .getUserReports(uid, limit: _historyLimit)
           .timeout(_historyTimeout);
-      return [
-        for (final r in reports)
-          PastReport(
-            stationId: r.stationId,
-            timestamp: r.timestamp,
-            pointsAwarded: r.pointsAwarded,
-          ),
-      ];
+      final queued = await _offlineDb.getUnsyncedReports(userId: uid);
+      return mergeReportHistory(reports, queued, uid: uid);
     } on Exception catch (e) {
       if (kDebugMode) print('Report history unavailable: $e');
       return null;
     }
   }
 
-  Future<void> _saveOffline(
-    DateTime now, {
-    required int points,
-    required String reason,
-  }) async {
+  Future<void> _saveOffline(ReportUpload r) async {
     await _offlineDb.insertPendingReport({
-      'userId': '',
-      'stationId': _stationId.isEmpty
-          ? 'manual_report_${now.millisecondsSinceEpoch}'
-          : _stationId,
-      'stationName': _stationName,
-      'brand': _brand,
-      'regularPrice': _regularPrice,
-      'premiumPrice': _premiumPrice,
-      'dieselPrice': _dieselPrice,
-      'latitude': _latitude,
-      'longitude': _longitude,
+      'userId': r.userId,
+      'stationId': r.stationId,
+      'stationName': r.stationName,
+      'brand': r.brand,
+      'regularPrice': r.regularPrice,
+      'premiumPrice': r.premiumPrice,
+      'dieselPrice': r.dieselPrice,
+      'latitude': r.latitude,
+      'longitude': r.longitude,
       'imagePath': _imagePath,
-      'timestamp': now.toIso8601String(),
+      'timestamp': (r.timestamp ?? DateTime.now()).toIso8601String(),
       'synced': 0,
-      'productPrices': jsonEncode(_productPrices),
-      'pointsAwarded': points,
-      'pointsReason': reason,
+      'productPrices': jsonEncode(r.productPrices),
+      'pointsAwarded': r.awardedPoints,
+      'pointsReason': r.pointsReason,
+      'isPending': r.isPending ? 1 : 0,
+      'remoteId': r.reportId,
     });
   }
 
@@ -756,6 +698,7 @@ class ReportViewModel extends ChangeNotifier {
     _stationDistances = {};
     _matchedStation = null;
     _lastAward = null;
+    _history = null;
     // Note: _lastSubmission is intentionally NOT reset — persists across reports
     notifyListeners();
   }

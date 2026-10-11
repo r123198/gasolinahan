@@ -214,6 +214,12 @@ class _Projection extends StatelessWidget {
                 fontFeatures: _tabular,
               ),
             ),
+          ] else ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Log fill-ups on different days to see your pace',
+              style: TextStyle(fontSize: 13, color: AppColors.onDarkMuted),
+            ),
           ],
         ],
       ),

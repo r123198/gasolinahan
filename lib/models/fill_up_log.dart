@@ -9,11 +9,12 @@ class FillUpLogEntry {
   final double? kmPerLiter;
   final double? costPerKm;
 
-  /// km/L beat the user's average (needs at least two efficiency readings).
-  final bool isAboveAverage;
+  /// km/L beat the user's average; null when there's nothing to compare
+  /// (fewer than two readings) or it matches the average exactly.
+  final bool? isAboveAverage;
 
-  /// ₱/km beat the user's average (needs at least two cost readings).
-  final bool isCheaperPerKm;
+  /// ₱/km beat the user's average; null as for [isAboveAverage].
+  final bool? isCheaperPerKm;
 
   /// Price per liter minus the average of the user's other fill-ups of the
   /// same fuel; negative means this one was cheaper. Null when there is
@@ -25,8 +26,8 @@ class FillUpLogEntry {
     this.kmSincePrevious,
     this.kmPerLiter,
     this.costPerKm,
-    this.isAboveAverage = false,
-    this.isCheaperPerKm = false,
+    this.isAboveAverage,
+    this.isCheaperPerKm,
     this.priceDelta,
   });
 }
@@ -104,14 +105,26 @@ class FillUpLog {
           kmSincePrevious: kms[i],
           kmPerLiter: efficiencies[i],
           costPerKm: costs[i],
-          isAboveAverage:
-              canCompareEfficiency && (efficiencies[i] ?? 0) > avgEfficiency!,
-          isCheaperPerKm:
-              canCompareCost && costs[i] != null && costs[i]! < avgCost!,
+          isAboveAverage: canCompareEfficiency
+              ? _beats(efficiencies[i], avgEfficiency!, higherIsBetter: true)
+              : null,
+          isCheaperPerKm: canCompareCost
+              ? _beats(costs[i], avgCost!, higherIsBetter: false)
+              : null,
           priceDelta: _priceDelta(ordered[i], ordered),
         ),
     ];
     return FillUpLog._(List.unmodifiable(entries), avgEfficiency, avgCost);
+  }
+
+  /// Whether [value] beats [average]; null when unknown or level.
+  static bool? _beats(
+    double? value,
+    double average, {
+    required bool higherIsBetter,
+  }) {
+    if (value == null || value == average) return null;
+    return higherIsBetter ? value > average : value < average;
   }
 
   static double? _kmPerLiter(double? km, double? liters) =>

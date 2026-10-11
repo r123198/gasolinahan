@@ -42,7 +42,7 @@ class DeviceNudgeNotifier implements NudgeNotifier {
   Future<void> showFillUpNudge(StationModel station) {
     return _plugin.show(
       id: station.id.hashCode & 0x7fffffff,
-      title: 'Fill-up at ${station.name}?',
+      title: 'Fill-up at ${station.displayName}?',
       body: 'Tap to log what you spent and your odometer.',
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(

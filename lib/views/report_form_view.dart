@@ -6,6 +6,7 @@ import '../components/report_points_card.dart';
 import '../components/app_primary_button.dart';
 import '../models/brand_registry.dart';
 import '../models/fill_up_validator.dart' show parseNumber;
+import '../models/report_matching.dart';
 import '../models/report_validator.dart';
 import '../models/station_model.dart';
 import '../ui/adaptive/app_dialog.dart';
@@ -98,10 +99,12 @@ class _ReportFormViewState extends State<ReportFormView> {
     // Auto-select brand from OCR detection
     _selectedBrand = vm.detectedBrand ?? BrandRegistry.findByName(vm.brand);
 
-    // Auto-select station if matched by proximity
-    if (vm.matchedStation != null) {
-      _selectedStation = vm.matchedStation;
-      _selectedBrand ??= BrandRegistry.findByName(vm.matchedStation!.brand);
+    // Auto-select the station matched by proximity, unless it is another
+    // brand than the board (then the user picks from the list).
+    final matched = vm.matchedStation;
+    if (matched != null && brandFits(_selectedBrand, matched)) {
+      _selectedStation = matched;
+      _selectedBrand ??= BrandRegistry.findByName(matched.brand);
     }
   }
 

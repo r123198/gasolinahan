@@ -5,7 +5,7 @@
         "default": {
           "projectId": "gasolinahan-e0917",
           "appId": "1:942344185423:android:79eafa07d4103cd275ec3a",
-          "fileOutput": "android/app/google-services.json"
+          "fileOutput": "android/app/src/prod/google-services.json"
         }
       },
       "ios": {
@@ -13,11 +13,11 @@
           "projectId": "gasolinahan-e0917",
           "appId": "1:942344185423:ios:ae814f1d5f51faf375ec3a",
           "uploadDebugSymbols": false,
-          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+          "fileOutput": "ios/config/prod/GoogleService-Info.plist"
         }
       },
       "dart": {
-        "lib/firebase_options.dart": {
+        "lib/firebase_options_prod.dart": {
           "projectId": "gasolinahan-e0917",
           "configurations": {
             "android": "1:942344185423:android:79eafa07d4103cd275ec3a",

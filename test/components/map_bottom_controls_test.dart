@@ -51,4 +51,47 @@ void main() {
     expect(find.byTooltip('Trip history'), findsOneWidget);
     expect(find.byTooltip('Go to my location'), findsOneWidget);
   });
+
+  testWidgets('stopping tracking tells the map to stop following', (
+    tester,
+  ) async {
+    final trips = TripViewModel(
+      source: FakeSource(),
+      service: FakeService(),
+      activity: FakeActivity(),
+      consent: FakeConsent(true),
+      currentUserId: () => null,
+    );
+    addTearDown(trips.dispose);
+    await tester.runAsync(() async {
+      await trips.startMonitoring();
+      await trips.trackNow();
+    });
+    var stopped = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: trips,
+        child: MaterialApp(
+          home: Scaffold(
+            body: MapBottomControls(
+              stationCount: 0,
+              onShowStations: () {},
+              onMyLocation: () {},
+              onTrackingStarted: () {},
+              onTrackingStopped: () => stopped++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(() async {
+      await tester.tap(find.textContaining('Stop'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+
+    expect(trips.isTracking, isFalse);
+    expect(stopped, 1);
+  });
 }

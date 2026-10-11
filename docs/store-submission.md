@@ -1,5 +1,8 @@
 # Store submission guide
 
+Always build with `--flavor prod` for the stores (see
+`docs/build-flavors.md`).
+
 What to enter in Google Play Console and App Store Connect for Gasolinahan,
 plus the one-time setup steps that can't live in code. Keep this in sync with
 `website/public/privacy.html` and `ios/Runner/PrivacyInfo.xcprivacy`: all
@@ -40,7 +43,7 @@ firebase deploy --only firestore:rules,hosting
 keytool -genkey -v -keystore android/upload-keystore.jks \
   -keyalg RSA -keysize 2048 -validity 10000 -alias upload
 cp android/key.properties.example android/key.properties   # then fill in
-fvm flutter build appbundle --release
+fvm flutter build appbundle --release --flavor prod
 ```
 
 - Both files are gitignored. Back them up somewhere safe (a password
@@ -52,7 +55,7 @@ fvm flutter build appbundle --release
 - In App Store Connect, create the app with bundle ID `com.maalam.gasolinahan`.
 - Signing team `5VA5T4RDYT` is already set in the Xcode project.
 - Build and upload:
-  `fvm flutter build ipa --release`, then upload
+  `fvm flutter build ipa --release --flavor prod`, then upload
   `build/ios/ipa/*.ipa` with Transporter or Xcode Organizer.
 - The app is iPhone-only and portrait-only. Export compliance is pre-answered
   (`ITSAppUsesNonExemptEncryption = NO`).

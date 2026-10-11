@@ -47,6 +47,22 @@ android {
         versionName = flutter.versionName
     }
 
+    // dev installs beside the store app and talks to the dev Firebase
+    // project; each flavor's google-services.json lives in src/<flavor>/.
+    flavorDimensions += "environment"
+    productFlavors {
+        create("dev") {
+            dimension = "environment"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            resValue("string", "app_name", "Gasolinahan Dev")
+        }
+        create("prod") {
+            dimension = "environment"
+            resValue("string", "app_name", "Gasolinahan")
+        }
+    }
+
     signingConfigs {
         create("release") {
             keyAlias = keystoreProperties.getProperty("keyAlias")

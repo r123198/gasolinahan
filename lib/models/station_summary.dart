@@ -105,25 +105,35 @@ class TrackerTotals {
   final double totalSpent;
   final double totalKm;
 
+  /// Spend on the fuel burned over [totalKm]: everything except the first
+  /// fill-up, whose fuel no logged distance covers yet.
+  final double spentOverKm;
+
   const TrackerTotals({
     required this.fillUps,
     required this.totalSpent,
     required this.totalKm,
+    this.spentOverKm = 0,
   });
 
-  double? get costPerKm => totalKm > 0 ? totalSpent / totalKm : null;
+  double? get costPerKm => totalKm > 0 ? spentOverKm / totalKm : null;
 
   factory TrackerTotals.from(List<FillUp> fillUps) {
     if (fillUps.isEmpty) {
       return const TrackerTotals(fillUps: 0, totalSpent: 0, totalKm: 0);
     }
-    final odometers = fillUps.map((f) => f.odometerKm);
-    final lowest = odometers.reduce((a, b) => a < b ? a : b);
-    final highest = odometers.reduce((a, b) => a > b ? a : b);
+    final first = fillUps.reduce(
+      (a, b) => a.odometerKm <= b.odometerKm ? a : b,
+    );
+    final highest = fillUps
+        .map((f) => f.odometerKm)
+        .reduce((a, b) => a > b ? a : b);
+    final totalSpent = fillUps.fold(0.0, (s, f) => s + f.amountSpent);
     return TrackerTotals(
       fillUps: fillUps.length,
-      totalSpent: fillUps.fold(0.0, (s, f) => s + f.amountSpent),
-      totalKm: highest - lowest,
+      totalSpent: totalSpent,
+      totalKm: highest - first.odometerKm,
+      spentOverKm: totalSpent - first.amountSpent,
     );
   }
 }

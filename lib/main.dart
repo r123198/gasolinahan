@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show appFlavor;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-import 'firebase_options.dart';
+import 'app_flavor.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/dashboard_viewmodel.dart';
 import 'viewmodels/fill_up_nudge_viewmodel.dart';
@@ -23,12 +24,15 @@ import 'ui/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const MyApp());
+  final flavor = flavorFrom(appFlavor);
+  await Firebase.initializeApp(options: firebaseOptionsFor(flavor));
+  runApp(MyApp(flavor: flavor));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final Flavor flavor;
+
+  const MyApp({super.key, this.flavor = Flavor.prod});
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +49,16 @@ class MyApp extends StatelessWidget {
         title: 'Gasolinahan',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
+        builder: (context, child) {
+          final label = flavor.label;
+          if (label == null || child == null) return child ?? const SizedBox();
+          return Banner(
+            message: label,
+            location: BannerLocation.topEnd,
+            color: AppColors.accent,
+            child: child,
+          );
+        },
         initialRoute: '/',
         routes: {
           '/': (context) => const SplashView(),

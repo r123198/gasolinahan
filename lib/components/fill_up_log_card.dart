@@ -405,11 +405,7 @@ class _StatTiles extends StatelessWidget {
                 value: kmPerLiter == null
                     ? '—'
                     : '${kmPerLiter.toStringAsFixed(2)} km/L',
-                trend: kmPerLiter == null
-                    ? null
-                    : entry.isAboveAverage
-                    ? _Trend.better
-                    : _Trend.worse,
+                trend: _trendOf(entry.isAboveAverage),
                 note: kmPerLiter == null ? 'Add liters' : null,
               ),
             ),
@@ -418,11 +414,7 @@ class _StatTiles extends StatelessWidget {
               child: _StatTile(
                 label: 'Cost',
                 value: costPerKm == null ? '—' : formatCostPerKm(costPerKm),
-                trend: costPerKm == null
-                    ? null
-                    : entry.isCheaperPerKm
-                    ? _Trend.better
-                    : _Trend.worse,
+                trend: _trendOf(entry.isCheaperPerKm),
               ),
             ),
           ],
@@ -433,6 +425,12 @@ class _StatTiles extends StatelessWidget {
     );
   }
 }
+
+_Trend? _trendOf(bool? better) => switch (better) {
+  true => _Trend.better,
+  false => _Trend.worse,
+  null => null,
+};
 
 enum _Trend { better, worse }
 

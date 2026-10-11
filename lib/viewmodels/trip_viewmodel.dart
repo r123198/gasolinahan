@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/trip_model.dart';
 import '../models/trip_point.dart';
@@ -15,6 +16,7 @@ class TripViewModel extends ChangeNotifier {
   final LocationSource _source;
   final DrivingActivitySource _activity;
   final TrackingConsentStore _consent;
+  final String? Function() _currentUserId;
 
   TripViewModel({
     TripTracker? tracker,
@@ -22,11 +24,21 @@ class TripViewModel extends ChangeNotifier {
     LocationSource? source,
     DrivingActivitySource? activity,
     TrackingConsentStore? consent,
+    String? Function()? currentUserId,
   }) : _tracker = tracker ?? TripTracker(),
        _service = service ?? TripService(),
        _source = source ?? DeviceLocationSource(),
        _activity = activity ?? DeviceDrivingActivitySource(),
-       _consent = consent ?? PrefsTrackingConsentStore();
+       _consent = consent ?? PrefsTrackingConsentStore(),
+       _currentUserId = currentUserId ?? _firebaseUserId;
+
+  static String? _firebaseUserId() {
+    try {
+      return FirebaseAuth.instance.currentUser?.uid;
+    } on FirebaseException {
+      return null; // Firebase not set up (tests, or before init)
+    }
+  }
 
   StreamSubscription<TripPoint>? _subscription;
   final StreamController<TripPoint> _locationUpdates =
@@ -66,7 +78,11 @@ class TripViewModel extends ChangeNotifier {
   Future<void> startAutoTracking() async {
     _autoTracking = await _consent.read();
     notifyListeners();
-    if (_autoTracking == true) await startMonitoring();
+    if (_autoTracking == true) {
+      await startMonitoring();
+    } else {
+      await loadHistory(); // past trips still show without background watching
+    }
   }
 
   /// Saves the user's answer and starts or stops watching to match.
@@ -172,14 +188,23 @@ class TripViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Loads the signed-in account's trips (plus unowned ones from before
+  /// trips were tied to accounts, which are claimed by that account). Call
+  /// again after sign-in or sign-out to show the right account's history.
   Future<void> loadHistory() async {
     try {
-      _history = await _service.getAll();
+      _history = await _readHistory();
     } catch (e) {
       _errorMessage = 'Could not load your trips.';
       if (kDebugMode) print('Trip history error: $e');
     }
     notifyListeners();
+  }
+
+  Future<List<Trip>> _readHistory() async {
+    final uid = _currentUserId();
+    if (uid != null) await _service.claimUnowned(uid);
+    return _service.getAll(ownerUid: uid);
   }
 
   Future<void> deleteTrip(Trip trip) async {
@@ -218,6 +243,7 @@ class TripViewModel extends ChangeNotifier {
           _activeTripId = await _service.beginActive(
             _tracker.startedAt ?? p.timestamp,
             _tracker.points,
+            ownerUid: _currentUserId(),
           );
         });
         notifyListeners();
@@ -229,6 +255,8 @@ class TripViewModel extends ChangeNotifier {
         await _source.setPrecise(false);
         final trip = update.finishedTrip;
         if (trip != null) await _finishActive(trip);
+        // A one-off trip that ended by itself: stop watching, as stopNow does.
+        if (_autoTracking != true) await stopMonitoring();
         notifyListeners();
       case TrackerEvent.none:
         break;
@@ -261,7 +289,9 @@ class TripViewModel extends ChangeNotifier {
     _tracker.startManual(from);
     await _source.setPrecise(true);
     await _persist(() async {
-      _activeTripId = await _service.beginActive(from.timestamp, [from]);
+      _activeTripId = await _service.beginActive(from.timestamp, [
+        from,
+      ], ownerUid: _currentUserId());
     });
   }
 
@@ -276,7 +306,7 @@ class TripViewModel extends ChangeNotifier {
       } else {
         await _service.delete(id);
       }
-      _history = await _service.getAll();
+      _history = await _readHistory();
     });
   }
 

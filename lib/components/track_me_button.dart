@@ -14,11 +14,13 @@ const _recordingRed = Color(0xFFF87171);
 
 /// "Track me" pill for the map. Trips also start on their own when driving is
 /// detected, so this mostly shows status; pressing it starts or stops by hand.
-/// [onStarted] runs once tracking begins, so the map can follow the user.
+/// [onStarted] runs once tracking begins, so the map can follow the user;
+/// [onStopped] runs once it is stopped by hand, so the map can stop following.
 class TrackMeButton extends StatelessWidget {
   final VoidCallback? onStarted;
+  final VoidCallback? onStopped;
 
-  const TrackMeButton({super.key, this.onStarted});
+  const TrackMeButton({super.key, this.onStarted, this.onStopped});
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +57,12 @@ class TrackMeButton extends StatelessWidget {
 
   Future<void> _toggle(BuildContext context, TripViewModel vm) async {
     if (vm.isTracking) {
-      await vm.stopNow();
+      try {
+        await vm.stopNow();
+      } on Exception catch (e) {
+        debugPrint('Stop tracking failed: $e');
+      }
+      onStopped?.call();
       return;
     }
     final agreed = await showAppConfirmDialog(
@@ -71,13 +78,21 @@ class TrackMeButton extends StatelessWidget {
       cancelLabel: 'Not now',
     );
     if (!agreed || !context.mounted) return;
-    await vm.trackNow();
+    try {
+      await vm.trackNow();
+    } on Exception catch (e) {
+      debugPrint('Track me failed: $e');
+    }
     if (!context.mounted) return;
     if (vm.permissionDenied) {
       showAppToast(
         context,
         'Allow location (choose "Always") so trips can be tracked.',
       );
+      return;
+    }
+    if (!vm.isTracking) {
+      showAppToast(context, "Couldn't start tracking. Please try again.");
       return;
     }
     onStarted?.call();

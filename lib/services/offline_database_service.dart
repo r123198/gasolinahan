@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 
@@ -17,6 +19,10 @@ const _fillUpDetailColumns = {
   'pointsAwarded': 'INTEGER NOT NULL DEFAULT 0',
 };
 
+/// Columns added to trips later: the account that recorded it (null for
+/// trips saved before accounts were tracked, or while signed out).
+const _tripColumns = {'ownerUid': 'TEXT'};
+
 /// Columns added to pending_reports later: per-product prices as JSON,
 /// e.g. {"XCS": 61.2, "Turbo Diesel": 55.1}.
 const _pendingReportColumns = {
@@ -24,6 +30,11 @@ const _pendingReportColumns = {
   // Points worked out when the report was made, awarded when it syncs.
   'pointsAwarded': 'INTEGER NOT NULL DEFAULT 0',
   'pointsReason': "TEXT NOT NULL DEFAULT ''",
+  // 1 when an unusual price waits for review (status "pending", 0 points).
+  'isPending': 'INTEGER NOT NULL DEFAULT 0',
+  // Report doc id of a timed-out online attempt, reused so it can't land
+  // twice.
+  'remoteId': 'TEXT',
 };
 
 /// ALTER statements that bring a fill_ups table with [existingColumns] up to
@@ -62,25 +73,35 @@ class OfflineDatabaseService {
     }
   }
 
-  /// Empties every table of personal data in one go, for account deletion.
-  /// trip_points goes before trips so the foreign key never dangles.
-  static Future<void> clearPersonalData() async {
+  /// Deletes [uid]'s personal data in one go, for account deletion, and
+  /// returns the photo paths of the fill-ups removed. Other accounts' fill-ups
+  /// and queued reports on this phone stay. trip_points goes before trips so
+  /// the foreign key never dangles.
+  static Future<List<String>> clearPersonalData({required String uid}) async {
     final db = await database;
-    await db.transaction((txn) async {
-      for (final table in const [
+    return db.transaction((txn) async {
+      final photos = await txn.query(
         'fill_ups',
-        'trip_points',
-        'trips',
+        columns: ['photoPaths'],
+        where: 'ownerUid = ?',
+        whereArgs: [uid],
+      );
+      await txn.delete('fill_ups', where: 'ownerUid = ?', whereArgs: [uid]);
+      await txn.delete('trip_points');
+      await txn.delete('trips');
+      await txn.delete(
         'pending_reports',
-      ]) {
-        await txn.delete(table);
-      }
+        where: 'userId = ?',
+        whereArgs: [uid],
+      );
+      return [for (final row in photos) ...decodePhotoPaths(row['photoPaths'])];
     });
   }
 
   static Future<void> _ensureFillUpColumns(Database db) async {
     await _ensureColumns(db, 'fill_ups', _fillUpDetailColumns);
     await _ensureColumns(db, 'pending_reports', _pendingReportColumns);
+    await _ensureColumns(db, 'trips', _tripColumns);
   }
 
   static Future<void> _ensureColumns(
@@ -138,7 +159,9 @@ class OfflineDatabaseService {
             synced INTEGER NOT NULL DEFAULT 0,
             productPrices TEXT NOT NULL DEFAULT '{}',
             pointsAwarded INTEGER NOT NULL DEFAULT 0,
-            pointsReason TEXT NOT NULL DEFAULT ''
+            pointsReason TEXT NOT NULL DEFAULT '',
+            isPending INTEGER NOT NULL DEFAULT 0,
+            remoteId TEXT
           )
         ''');
   }
@@ -150,7 +173,8 @@ class OfflineDatabaseService {
             startedAt TEXT NOT NULL,
             endedAt TEXT NOT NULL,
             distanceMeters REAL NOT NULL,
-            isActive INTEGER NOT NULL DEFAULT 0
+            isActive INTEGER NOT NULL DEFAULT 0,
+            ownerUid TEXT
           )
         ''');
     await db.execute('''
@@ -199,9 +223,16 @@ class OfflineDatabaseService {
     return db.insert('pending_reports', report);
   }
 
-  Future<List<Map<String, dynamic>>> getUnsyncedReports() async {
+  /// [userId]'s reports still waiting to upload.
+  Future<List<Map<String, dynamic>>> getUnsyncedReports({
+    required String userId,
+  }) async {
     final db = await database;
-    return db.query('pending_reports', where: 'synced = ?', whereArgs: [0]);
+    return db.query(
+      'pending_reports',
+      where: 'synced = ? AND userId = ?',
+      whereArgs: [0, userId],
+    );
   }
 
   Future<void> markAsSynced(int id) async {
@@ -220,5 +251,16 @@ class OfflineDatabaseService {
       'SELECT COUNT(*) as count FROM pending_reports WHERE synced = 0',
     );
     return Sqflite.firstIntValue(result) ?? 0;
+  }
+}
+
+/// Reads a fill_ups.photoPaths JSON list; bad data → none.
+List<String> decodePhotoPaths(Object? raw) {
+  if (raw is! String || raw.isEmpty) return const [];
+  try {
+    final decoded = jsonDecode(raw);
+    return decoded is List ? decoded.whereType<String>().toList() : const [];
+  } on FormatException {
+    return const [];
   }
 }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +22,7 @@ import '../ui/app_theme.dart';
 import '../ui/map_style.dart';
 import '../components/brand_logo.dart';
 import '../components/map_bottom_controls.dart';
+import '../services/geo.dart';
 import '../services/heading_stream.dart';
 import '../models/map_framing.dart';
 import 'nearby_stations_sheet.dart';
@@ -72,8 +72,16 @@ class _DashboardViewState extends State<DashboardView> {
   bool _locationResolved = false;
 
   /// Created once: the layer resubscribes whenever it gets a new stream.
+  /// The compass needs no permission.
   final Stream<LocationMarkerHeading?> _headingStream =
       headingStreamForDevice();
+
+  /// The blue dot's positions. It never asks for permission itself (the
+  /// tracking disclosure must come first), and it closes for good if
+  /// location isn't allowed yet, so it is recreated once permission is
+  /// confirmed; see [_onLocationAllowed].
+  Stream<LocationMarkerPosition?> _positionStream = _newPositionStream();
+  bool _positionStreamHasPermission = false;
   final MapController _mapController = MapController();
   final Location _location = Location();
 
@@ -204,21 +212,49 @@ class _DashboardViewState extends State<DashboardView> {
     }
   }
 
-  Future<void> _lookUpInitialLocation() async {
-    bool serviceEnabled = await _location.serviceEnabled();
-    if (!serviceEnabled) {
-      serviceEnabled = await _location.requestService();
-      if (!serviceEnabled) return;
-    }
+  static Stream<LocationMarkerPosition?> _newPositionStream() {
+    const factory = LocationMarkerDataStreamFactory();
+    return factory.fromGeolocatorPositionStream(
+      stream: factory.defaultPositionStreamSource(
+        requestPermissionCallback: null,
+      ),
+    );
+  }
 
-    PermissionStatus permission = await _location.hasPermission();
-    if (permission == PermissionStatus.denied) {
-      permission = await _location.requestPermission();
-      if (permission != PermissionStatus.granted &&
-          permission != PermissionStatus.grantedLimited) {
-        return;
+  /// Location is allowed now: give the dot a fresh stream if the current
+  /// one started (and closed) before permission was granted.
+  void _onLocationAllowed() {
+    if (_positionStreamHasPermission || !mounted) return;
+    setState(() {
+      _positionStreamHasPermission = true;
+      _positionStream = _newPositionStream();
+    });
+  }
+
+  /// Turns on location and asks for permission if needed. True when allowed.
+  Future<bool> _ensureLocationAllowed() async {
+    try {
+      var serviceEnabled = await _location.serviceEnabled();
+      if (!serviceEnabled) serviceEnabled = await _location.requestService();
+      if (!serviceEnabled) return false;
+
+      var permission = await _location.hasPermission();
+      if (permission == PermissionStatus.denied) {
+        permission = await _location.requestPermission();
       }
+      final allowed =
+          permission == PermissionStatus.granted ||
+          permission == PermissionStatus.grantedLimited;
+      if (allowed) _onLocationAllowed();
+      return allowed;
+    } on PlatformException catch (e) {
+      debugPrint('Location permission check failed: ${e.code}');
+      return false;
     }
+  }
+
+  Future<void> _lookUpInitialLocation() async {
+    if (!await _ensureLocationAllowed()) return;
 
     try {
       final loc = await _location.getLocation().timeout(_locationTimeout);
@@ -239,6 +275,12 @@ class _DashboardViewState extends State<DashboardView> {
   /// Re-centres on the user. The location dot's own fix answers at once;
   /// the plugin lookup (which can wait forever without a GPS fix) is capped.
   Future<void> _goToMyLocation() async {
+    if (!await _ensureLocationAllowed()) {
+      if (mounted) {
+        showAppToast(context, 'Allow location access to see where you are.');
+      }
+      return;
+    }
     _alignToUser.add(15);
     try {
       final loc = await _location.getLocation().timeout(_locationTimeout);
@@ -272,7 +314,10 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   void _showStationDetail(StationModel station) {
-    _mapController.move(LatLng(station.latitude, station.longitude), 16.0);
+    // (0,0) means no coordinates; moving there would show open ocean.
+    if (station.latitude != 0 || station.longitude != 0) {
+      _mapController.move(LatLng(station.latitude, station.longitude), 16.0);
+    }
     showStationDetailSheet(
       context,
       station: station,
@@ -280,25 +325,6 @@ class _DashboardViewState extends State<DashboardView> {
       userLng: _userLng,
       onReport: () => Navigator.pushNamed(context, '/report'),
     );
-  }
-
-  /// Haversine distance in meters
-  static double _haversineMeters(
-    double lat1,
-    double lon1,
-    double lat2,
-    double lon2,
-  ) {
-    const R = 6371000.0;
-    final dLat = (lat2 - lat1) * math.pi / 180;
-    final dLon = (lon2 - lon1) * math.pi / 180;
-    final a =
-        math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1 * math.pi / 180) *
-            math.cos(lat2 * math.pi / 180) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
   /// Find the cheapest station among nearby ones (within 5km) for the given fuel type.
@@ -317,7 +343,7 @@ class _DashboardViewState extends State<DashboardView> {
 
     for (final s in stations) {
       if (s.latitude == 0 && s.longitude == 0) continue;
-      final dist = _haversineMeters(
+      final dist = haversineMeters(
         _userLat!,
         _userLng!,
         s.latitude,
@@ -419,6 +445,7 @@ class _DashboardViewState extends State<DashboardView> {
               onShowStations: _openNearbyStations,
               onMyLocation: _goToMyLocation,
               onTrackingStarted: _startFollowingUser,
+              onTrackingStopped: _stopFollowingUser,
             ),
           ),
         ),
@@ -428,8 +455,15 @@ class _DashboardViewState extends State<DashboardView> {
 
   /// Centers on the user and keeps them centered while they move.
   void _startFollowingUser() {
+    _onLocationAllowed(); // tracking started, so location is allowed
     setState(() => _followUser = true);
     _alignToUser.add(_followZoom);
+  }
+
+  /// Tracking stopped by hand: let the map rest where it is.
+  void _stopFollowingUser() {
+    if (!mounted || !_followUser) return;
+    setState(() => _followUser = false);
   }
 
   Future<void> _openNearbyStations({String query = ''}) async {
@@ -594,6 +628,7 @@ class _DashboardViewState extends State<DashboardView> {
             // OSM credit is shown under the map controls instead of the
             // corner widget, which the floating nav bar would cover.
             CurrentLocationLayer(
+              positionStream: _positionStream,
               headingStream: _headingStream,
               alignPositionStream: _alignToUser.stream,
               alignPositionOnUpdate: _followUser

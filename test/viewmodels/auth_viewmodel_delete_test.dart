@@ -38,11 +38,13 @@ class FakeFirebaseService implements FirebaseService {
 
 class FakeLocalAccountData implements LocalAccountData {
   var wipes = 0;
+  final wipedUids = <String>[];
   Exception? wipeError;
 
   @override
-  Future<void> wipe() async {
+  Future<void> wipe({required String uid}) async {
     wipes++;
+    wipedUids.add(uid);
     final error = wipeError;
     if (error != null) throw error;
   }
@@ -67,6 +69,7 @@ void main() {
     expect(firebase.deletedWith, ['secret123']);
     expect(auth.isAuthenticated, isFalse);
     expect(local.wipes, 1);
+    expect(local.wipedUids, ['uid-1']);
     expect(auth.isLoading, isFalse);
   });
 

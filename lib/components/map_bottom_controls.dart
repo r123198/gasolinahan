@@ -17,6 +17,7 @@ class MapBottomControls extends StatelessWidget {
   final VoidCallback onShowStations;
   final VoidCallback onMyLocation;
   final VoidCallback onTrackingStarted;
+  final VoidCallback? onTrackingStopped;
 
   const MapBottomControls({
     super.key,
@@ -24,6 +25,7 @@ class MapBottomControls extends StatelessWidget {
     required this.onShowStations,
     required this.onMyLocation,
     required this.onTrackingStarted,
+    this.onTrackingStopped,
   });
 
   @override
@@ -41,7 +43,10 @@ class MapBottomControls extends StatelessWidget {
               Expanded(
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: TrackMeButton(onStarted: onTrackingStarted),
+                  child: TrackMeButton(
+                    onStarted: onTrackingStarted,
+                    onStopped: onTrackingStopped,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),

@@ -27,8 +27,19 @@ class DeviceLocationSource implements LocationSource {
       .where((d) => d.latitude != null && d.longitude != null)
       .map(_toPoint);
 
+  /// Never throws: a plugin failure (e.g. the settings prompt failing) is
+  /// treated like a refusal so callers' startup carries on.
   @override
   Future<bool> start() async {
+    try {
+      return await _start();
+    } on PlatformException catch (e) {
+      debugPrint('Could not start location: ${e.code}');
+      return false;
+    }
+  }
+
+  Future<bool> _start() async {
     var enabled = await _location.serviceEnabled();
     if (!enabled) enabled = await _location.requestService();
     if (!enabled) return false;

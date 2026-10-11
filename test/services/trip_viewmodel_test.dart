@@ -65,12 +65,22 @@ class FakeService extends TripService {
   final finished = <FinishedTrip>[];
   final active = <int, List<TripPoint>>{};
   final deleted = <int>[];
+
+  /// Owner of each trip by id (null = unowned).
+  final owners = <int, String?>{};
+  final finishedIds = <int>[];
+  final claimedBy = <String>[];
   var _nextId = 1;
 
   @override
-  Future<int> beginActive(DateTime startedAt, List<TripPoint> points) async {
+  Future<int> beginActive(
+    DateTime startedAt,
+    List<TripPoint> points, {
+    String? ownerUid,
+  }) async {
     final id = _nextId++;
     active[id] = [...points];
+    owners[id] = ownerUid;
     return id;
   }
 
@@ -82,6 +92,7 @@ class FakeService extends TripService {
   Future<void> finalize(int tripId, FinishedTrip trip) async {
     active.remove(tripId);
     finished.add(trip);
+    finishedIds.add(tripId);
   }
 
   @override
@@ -97,15 +108,27 @@ class FakeService extends TripService {
   }
 
   @override
-  Future<List<Trip>> getAll() async => [
-    for (final t in finished)
-      Trip(
-        id: 1,
-        startedAt: t.startedAt,
-        endedAt: t.endedAt,
-        distanceMeters: t.distanceMeters,
-      ),
+  Future<void> claimUnowned(String uid) async {
+    claimedBy.add(uid);
+    for (final id in [...owners.keys]) {
+      owners[id] ??= uid;
+    }
+  }
+
+  @override
+  Future<List<Trip>> getAll({String? ownerUid}) async => [
+    for (var i = 0; i < finished.length; i++)
+      if (_visible(owners[finishedIds[i]], ownerUid))
+        Trip(
+          id: finishedIds[i],
+          startedAt: finished[i].startedAt,
+          endedAt: finished[i].endedAt,
+          distanceMeters: finished[i].distanceMeters,
+        ),
   ];
+
+  static bool _visible(String? owner, String? viewer) =>
+      owner == null || owner == viewer;
 }
 
 final _t0 = DateTime(2026, 1, 1, 8);
@@ -125,19 +148,37 @@ void main() {
   late FakeActivity activity;
   late FakeConsent consent;
   late TripViewModel vm;
+  String? uid;
 
   setUp(() {
     source = FakeSource();
     service = FakeService();
     activity = FakeActivity();
     consent = FakeConsent();
+    uid = null;
     vm = TripViewModel(
       source: source,
       service: service,
       activity: activity,
       consent: consent,
+      currentUserId: () => uid,
     );
   });
+
+  /// Drives 960 m by hand, then sits still until the trip ends by itself.
+  Future<void> driveThenIdle() async {
+    source.controller.add(pt(0, 0, speed: 0));
+    await settle();
+    await vm.trackNow();
+    for (var i = 1; i <= 80; i++) {
+      source.controller.add(pt(i, 12.0 * i));
+      await settle();
+    }
+    for (var i = 1; i <= 310; i++) {
+      source.controller.add(pt(80 + i, 960, speed: 0));
+      await settle();
+    }
+  }
 
   tearDown(() => vm.dispose());
 
@@ -166,6 +207,47 @@ void main() {
       expect(vm.autoTrackingChoice, isFalse);
       expect(vm.isMonitoring, isFalse);
     });
+
+    test('still shows past trips when the user said no earlier', () async {
+      final id = await service.beginActive(_t0, [pt(0, 0)]);
+      await service.finalize(
+        id,
+        recoverTrip([for (var i = 0; i <= 10; i++) pt(i * 10, 100.0 * i)])!,
+      );
+      consent.saved = false;
+
+      await vm.startAutoTracking();
+
+      expect(vm.history, hasLength(1));
+    });
+
+    test(
+      'a manual trip that ends by itself stops watching without consent',
+      () async {
+        consent.saved = false;
+        await vm.startAutoTracking();
+        await vm.startMonitoring();
+
+        await driveThenIdle();
+
+        expect(service.finished, hasLength(1));
+        expect(vm.isTracking, isFalse);
+        expect(vm.isMonitoring, isFalse);
+        expect(source.stops, 1);
+      },
+    );
+
+    test(
+      'a manual trip that ends by itself keeps watching with consent',
+      () async {
+        await vm.setAutoTracking(true);
+
+        await driveThenIdle();
+
+        expect(service.finished, hasLength(1));
+        expect(vm.isMonitoring, isTrue);
+      },
+    );
 
     test('turning it on saves the choice and starts watching', () async {
       await vm.setAutoTracking(true);
@@ -406,5 +488,54 @@ void main() {
     await vm.stopNow();
     expect(service.finished, hasLength(1));
     expect(vm.isTracking, isFalse);
+  });
+
+  group('trips belong to the signed-in account', () {
+    test('a new trip is saved under the current account', () async {
+      uid = 'alice';
+      await vm.startMonitoring();
+      source.controller.add(pt(0, 0, speed: 0));
+      await settle();
+
+      await vm.trackNow();
+
+      expect(service.owners.values.single, 'alice');
+    });
+
+    test('history hides another account\'s trips', () async {
+      uid = 'alice';
+      await vm.startMonitoring();
+      await driveThenIdle();
+      expect(vm.history, hasLength(1));
+
+      uid = 'bob';
+      await vm.loadHistory();
+
+      expect(vm.history, isEmpty);
+    });
+
+    test('signed out, history hides account trips', () async {
+      uid = 'alice';
+      await vm.startMonitoring();
+      await driveThenIdle();
+
+      uid = null;
+      await vm.loadHistory();
+
+      expect(vm.history, isEmpty);
+    });
+
+    test('trips from before accounts are claimed on sign-in', () async {
+      await vm.startMonitoring();
+      await driveThenIdle(); // saved while signed out
+      expect(service.owners.values.single, isNull);
+
+      uid = 'alice';
+      await vm.loadHistory();
+
+      expect(service.claimedBy, ['alice']);
+      expect(service.owners.values.single, 'alice');
+      expect(vm.history, hasLength(1));
+    });
   });
 }

@@ -172,35 +172,48 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The filter chip gets its own row: beside the title and refresh button
+    // it overflowed at large text sizes.
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Text(
-                query.isEmpty ? 'Nearby stations' : 'Results for "$query"',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge,
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    query.isEmpty ? 'Nearby stations' : 'Results for "$query"',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
               ),
+              AppIconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh),
+                onPressed: vm.fetchNearbyStations,
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilterChip(
+              label: Text(
+                'With ${_fuelLabels[vm.fuelType]} price',
+                overflow: TextOverflow.ellipsis,
+              ),
+              tooltip: vm.onlyWithPrices
+                  ? 'Showing only stations with a ${_fuelLabels[vm.fuelType]} '
+                        'price. Tap to show all.'
+                  : 'Tap to hide stations without a '
+                        '${_fuelLabels[vm.fuelType]} price',
+              selected: vm.onlyWithPrices,
+              onSelected: (_) => vm.toggleOnlyWithPrices(),
             ),
-          ),
-          FilterChip(
-            label: Text('With ${_fuelLabels[vm.fuelType]} price'),
-            tooltip: vm.onlyWithPrices
-                ? 'Showing only stations with a ${_fuelLabels[vm.fuelType]} '
-                      'price. Tap to show all.'
-                : 'Tap to hide stations without a '
-                      '${_fuelLabels[vm.fuelType]} price',
-            selected: vm.onlyWithPrices,
-            onSelected: (_) => vm.toggleOnlyWithPrices(),
-          ),
-          AppIconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: vm.fetchNearbyStations,
           ),
         ],
       ),

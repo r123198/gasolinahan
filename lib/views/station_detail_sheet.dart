@@ -45,7 +45,10 @@ Future<void> showStationDetailSheet(
               )
             else
               _Current(reportedAt: station.lastUpdated),
-            if (userLat != null && userLng != null) ...[
+            // A station without coordinates (0,0) has no meaningful detour.
+            if (userLat != null &&
+                userLng != null &&
+                (station.latitude != 0 || station.longitude != 0)) ...[
               const SizedBox(height: 12),
               DetourCard(station: station, userLat: userLat, userLng: userLng),
             ],

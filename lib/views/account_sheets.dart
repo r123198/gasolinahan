@@ -29,6 +29,9 @@ Future<bool> showDeleteAccountSheet(BuildContext context) async {
   final deleted = await showAppSheet<bool>(
     context: context,
     isScrollControlled: true,
+    // Swiping ignores PopScope; the form blocks other dismissals while the
+    // deletion runs so its result always comes back.
+    enableDrag: false,
     builder: (_) => const _DeleteAccountForm(),
   );
   return deleted ?? false;
@@ -300,43 +303,46 @@ class _DeleteAccountFormState extends State<_DeleteAccountForm> {
   @override
   Widget build(BuildContext context) {
     final isLoading = context.select<AuthViewModel, bool>((a) => a.isLoading);
-    return _SheetForm(
-      title: 'Delete account',
-      children: [
-        const Text(
-          'This permanently deletes your account, fill-up log, points, '
-          'price reports and profile photo, plus the trips and photos saved '
-          "on this phone. It can't be undone.",
-          style: TextStyle(fontSize: 14, height: 1.4),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Prices you reported stay on the map without your name.',
-          style: TextStyle(fontSize: 13, color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 20),
-        AppTextField(
-          controller: _password,
-          label: 'Password',
-          hint: 'Enter your password to confirm',
-          icon: Icons.lock_outline,
-          isPassword: true,
-          obscureText: _obscure,
-          onToggleObscure: () => setState(() => _obscure = !_obscure),
-          errorText: _passwordError,
-          textInputAction: TextInputAction.done,
-          autofillHints: const [AutofillHints.password],
-          onSubmitted: (_) => _delete(),
-        ),
-        const SizedBox(height: 24),
-        AppFormError(message: _formError),
-        AppPrimaryButton(
-          label: 'Delete my account',
-          backgroundColor: AppColors.error,
-          isLoading: isLoading,
-          onPressed: isLoading ? null : _delete,
-        ),
-      ],
+    return PopScope(
+      canPop: !isLoading,
+      child: _SheetForm(
+        title: 'Delete account',
+        children: [
+          const Text(
+            'This permanently deletes your account, fill-up log, points, '
+            'price reports and profile photo, plus the trips and photos saved '
+            "on this phone. It can't be undone.",
+            style: TextStyle(fontSize: 14, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Prices you reported stay on the map without your name.',
+            style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 20),
+          AppTextField(
+            controller: _password,
+            label: 'Password',
+            hint: 'Enter your password to confirm',
+            icon: Icons.lock_outline,
+            isPassword: true,
+            obscureText: _obscure,
+            onToggleObscure: () => setState(() => _obscure = !_obscure),
+            errorText: _passwordError,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.password],
+            onSubmitted: (_) => _delete(),
+          ),
+          const SizedBox(height: 24),
+          AppFormError(message: _formError),
+          AppPrimaryButton(
+            label: 'Delete my account',
+            backgroundColor: AppColors.error,
+            isLoading: isLoading,
+            onPressed: isLoading ? null : _delete,
+          ),
+        ],
+      ),
     );
   }
 }

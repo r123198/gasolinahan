@@ -67,12 +67,7 @@ class DetourCard extends StatelessWidget {
       );
     }
     final v = advice.verdict;
-    final detail =
-        '${advice.nearest.name} is closer at '
-        '₱${advice.priceHere.toStringAsFixed(2)}/L. '
-        'Here saves ~${formatPesos(v.savings)} on ${liters.toStringAsFixed(0)} L, '
-        'but ${formatKmShort(advice.extraKm)} extra driving costs '
-        '~${formatPesos(v.detourCost)}.';
+    final detail = detourDetail(advice, liters);
     return v.worthIt
         ? _Panel(
             color: _worthGreen,
@@ -85,6 +80,22 @@ class DetourCard extends StatelessWidget {
             detail: detail,
           );
   }
+}
+
+/// Explains the verdict. When this station is pricier than the closest one
+/// the fuel itself costs more, so say so rather than "saves ~₱0".
+@visibleForTesting
+String detourDetail(DetourAdvice advice, double liters) {
+  final v = advice.verdict;
+  final amount = liters.toStringAsFixed(0);
+  final fuel = v.savings.round() < 0
+      ? 'Here costs ~${formatPesos(-v.savings)} more on $amount L, '
+            'and ${formatKmShort(advice.extraKm)} extra driving adds '
+      : 'Here saves ~${formatPesos(v.savings)} on $amount L, '
+            'but ${formatKmShort(advice.extraKm)} extra driving costs ';
+  return '${advice.nearest.displayName} is closer at '
+      '₱${advice.priceHere.toStringAsFixed(2)}/L. '
+      '$fuel~${formatPesos(v.detourCost)}.';
 }
 
 class _Panel extends StatelessWidget {

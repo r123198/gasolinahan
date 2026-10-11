@@ -211,3 +211,58 @@ _Label? _matchLabel(String text, BrandInfo? brand) {
   }
   return null;
 }
+
+/// Keywords that indicate a fuel price board
+const _fuelKeywords = [
+  // Fuel types
+  'regular', 'unleaded', 'premium', 'super', 'diesel', 'dsl',
+  'gasoline', 'gasolin', 'gasolina', 'kerosene',
+  // Octane ratings
+  'ron', '87', '91', '93', '95', '97',
+  'octane',
+  // Brands & product names
+  'v-power', 'vpower', 'xcs', 'blaze', 'turbo', 'xtreme',
+  'fuel', 'petrol',
+  // Board context
+  'price', 'prices', 'presyo', 'per liter', 'per litre', '/l',
+  'pump', 'station',
+  // Philippine brands
+  'shell', 'petron', 'caltex', 'seaoil', 'unioil', 'phoenix',
+  'total', 'ptt', 'jetti', 'cleanfuel', 'flying v',
+];
+
+/// Minimum number of fuel keywords that must appear to consider it a price board
+const _minKeywordMatches = 2;
+
+/// Check if the OCR text contains enough fuel-related keywords to be a price board
+bool looksLikePriceBoard(String rawText) {
+  final text = rawText.toLowerCase();
+
+  // Count how many fuel keywords appear
+  int keywordHits = 0;
+  final matched = <String>{};
+  for (final kw in _fuelKeywords) {
+    if (text.contains(kw) && !matched.contains(kw)) {
+      matched.add(kw);
+      keywordHits++;
+    }
+  }
+
+  // Also check for price-like patterns (XX.XX or XX,XX in the 30-150 range)
+  final pricePattern = RegExp(r'(\d{2,3})[.,](\d{2})');
+  final priceMatches = pricePattern.allMatches(text);
+  int validPriceCount = 0;
+  for (final match in priceMatches) {
+    final whole = int.tryParse(match.group(1)!) ?? 0;
+    final decimal = int.tryParse(match.group(2)!) ?? 0;
+    final price = whole + decimal / 100.0;
+    if (price >= 30 && price <= 150) {
+      validPriceCount++;
+    }
+  }
+
+  // Must have at least 2 fuel keywords AND at least 1 valid price
+  // OR at least 1 fuel keyword AND at least 2 valid prices
+  return (keywordHits >= _minKeywordMatches && validPriceCount >= 1) ||
+      (keywordHits >= 1 && validPriceCount >= 2);
+}

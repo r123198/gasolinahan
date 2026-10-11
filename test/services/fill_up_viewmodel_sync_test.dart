@@ -149,6 +149,17 @@ void main() {
     expect(model.fillUps, hasLength(1));
   });
 
+  test('loads started together share one sync (no duplicates)', () async {
+    remote.docs['x'] = fill(remoteId: 'x', odo: 2000);
+    await local.insert(fill(odo: 1500));
+    final model = vm();
+    await Future.wait([model.load(), model.load()]);
+    await pumpEventQueue();
+
+    expect(local.rows, hasLength(2));
+    expect(remote.docs, hasLength(2));
+  });
+
   test("another account's fill-ups stay hidden", () async {
     await local.insert(fill(odo: 900, owner: 'someone-else', remoteId: 'z'));
     final model = vm();
@@ -176,6 +187,31 @@ void main() {
       await pumpEventQueue();
 
       expect(awards.map((a) => a.$2), [3, -3]);
+    });
+
+    test(
+      'editing keeps the points so deleting still takes them back',
+      () async {
+        final model = vm();
+        await model.add(fill());
+        await pumpEventQueue();
+        final saved = model.fillUps.single;
+        // The form rebuilds the fill-up without its points.
+        await model.update(fill(odo: 1100).copyWith(id: saved.id));
+        expect(local.rows.values.single.pointsAwarded, 3);
+
+        await model.remove(model.fillUps.single);
+        await pumpEventQueue();
+        expect(awards.map((a) => a.$2), [3, -3]);
+      },
+    );
+
+    test('a granted award bumps pointsVersion', () async {
+      final model = vm();
+      final before = model.pointsVersion;
+      await model.add(fill());
+      await pumpEventQueue();
+      expect(model.pointsVersion, greaterThan(before));
     });
 
     test('signed out: no points', () async {

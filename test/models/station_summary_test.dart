@@ -102,14 +102,15 @@ void main() {
       expect(t.costPerKm, isNull);
     });
 
-    test('spans lowest to highest odometer', () {
+    test('spans lowest to highest odometer, minus the first tank', () {
       final t = TrackerTotals.from([
         fill('a', 1000, 10000, 1),
         fill('b', 1000, 10500, 5),
       ]);
       expect(t.totalSpent, 2000);
       expect(t.totalKm, 500);
-      expect(t.costPerKm, 4);
+      // The first ₱1000 was burned before any logged km: 1000 / 500.
+      expect(t.costPerKm, 2);
     });
   });
 }

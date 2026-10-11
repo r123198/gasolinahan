@@ -54,6 +54,12 @@ class FillUpViewModel extends ChangeNotifier {
   /// What the most recent [add] earned (null when signed out).
   PointsAward? get lastAward => _lastAward;
 
+  int _pointsVersion = 0;
+
+  /// Bumps each time a points change reaches the server, so screens showing
+  /// the balance know to re-read it.
+  int get pointsVersion => _pointsVersion;
+
   static String? _firebaseUserId() {
     try {
       return FirebaseAuth.instance.currentUser?.uid;
@@ -107,8 +113,15 @@ class FillUpViewModel extends ChangeNotifier {
   List<FillUp> historyFor(String key) =>
       StationSummary.historyFor(key, _fillUps);
 
-  /// Shows the local log at once, then merges in the cloud copy.
-  Future<void> load() async {
+  Future<void>? _loading;
+
+  /// Shows the local log at once, then merges in the cloud copy. Calls made
+  /// while a load is running join it: two syncs planned from the same
+  /// snapshot would insert and upload every row twice.
+  Future<void> load() =>
+      _loading ??= _load().whenComplete(() => _loading = null);
+
+  Future<void> _load() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -166,14 +179,14 @@ class FillUpViewModel extends ChangeNotifier {
   void _grant(String uid, int points, String reason, String? remoteId) {
     if (points == 0) return;
     unawaited(
-      _awardPoints(
-        uid,
-        points,
-        reason,
-        'fill-up:${remoteId ?? 'local'}',
-      ).catchError((Object e) {
-        if (kDebugMode) print('Points award failed: $e');
-      }),
+      _awardPoints(uid, points, reason, 'fill-up:${remoteId ?? 'local'}')
+          .then((_) {
+            _pointsVersion++;
+            notifyListeners();
+          })
+          .catchError((Object e) {
+            if (kDebugMode) print('Points award failed: $e');
+          }),
     );
   }
 
@@ -231,6 +244,7 @@ class FillUpViewModel extends ChangeNotifier {
     final carried = fillUp.copyWith(
       remoteId: existing?.remoteId,
       ownerUid: existing?.ownerUid,
+      pointsAwarded: existing?.pointsAwarded,
     );
     try {
       final toSave = uid == null

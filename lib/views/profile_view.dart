@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../components/app_list_tile.dart';
@@ -45,10 +46,30 @@ class _ProfileViewState extends State<ProfileView> {
   bool _isLoadingReports = true;
   String? _reportsError;
 
+  late final FillUpViewModel _fillUps;
+  int _seenPointsVersion = 0;
+
   @override
   void initState() {
     super.initState();
+    // This tab stays alive in the dashboard, so it re-reads the balance
+    // whenever a fill-up earns or loses points.
+    _fillUps = context.read<FillUpViewModel>();
+    _seenPointsVersion = _fillUps.pointsVersion;
+    _fillUps.addListener(_onFillUpsChanged);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _fillUps.removeListener(_onFillUpsChanged);
+    super.dispose();
+  }
+
+  void _onFillUpsChanged() {
+    if (_fillUps.pointsVersion == _seenPointsVersion) return;
+    _seenPointsVersion = _fillUps.pointsVersion;
+    unawaited(context.read<AuthViewModel>().refreshUser());
   }
 
   Future<void> _loadData() async {
@@ -95,12 +116,24 @@ class _ProfileViewState extends State<ProfileView> {
     );
     if (source == null) return;
 
-    final picked = await _picker.pickImage(
-      source: source,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 80,
-    );
+    final XFile? picked;
+    try {
+      picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 80,
+      );
+    } on PlatformException {
+      if (!mounted) return;
+      showAppToast(
+        context,
+        source == ImageSource.camera
+            ? 'Allow camera access in Settings to take a photo'
+            : 'Allow photo access in Settings to choose a photo',
+      );
+      return;
+    }
     if (picked == null || !mounted) return;
     final auth = context.read<AuthViewModel>();
     await auth.updateProfileImage(picked.path);
@@ -124,8 +157,9 @@ class _ProfileViewState extends State<ProfileView> {
     await context.read<AuthViewModel>().signOut();
     // The next account on this phone answers the disclosure for itself.
     await trips.forgetAutoTracking();
-    // Signed out, the log shows no account's fill-ups.
+    // Signed out, the log and trip history show no account's entries.
     unawaited(fillUps.load());
+    unawaited(trips.loadHistory());
     if (!mounted) return;
     // Clear the whole stack so Back can't return to signed-in screens.
     Navigator.of(

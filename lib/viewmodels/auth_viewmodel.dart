@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../services/firebase_service.dart';
 import '../services/local_account_data.dart';
+import '../services/report_writer.dart' show onReportsUploaded;
 
 class AuthViewModel extends ChangeNotifier {
   final FirebaseService _firebaseService;
@@ -11,7 +13,27 @@ class AuthViewModel extends ChangeNotifier {
 
   AuthViewModel({FirebaseService? firebaseService, LocalAccountData? localData})
     : _firebaseService = firebaseService ?? FirebaseService(),
-      _localData = localData ?? LocalAccountData();
+      _localData = localData ?? LocalAccountData() {
+    // Reports earn points; re-read them so the Account tab stays current.
+    _uploadsSub = onReportsUploaded.listen((_) => _refreshAfterUpload());
+  }
+
+  late final StreamSubscription<void> _uploadsSub;
+
+  Future<void> _refreshAfterUpload() async {
+    if (_currentUser == null) return;
+    try {
+      await refreshUser();
+    } on Exception catch (e) {
+      debugPrint('Refreshing points after a report failed: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _uploadsSub.cancel();
+    super.dispose();
+  }
 
   UserModel? _currentUser;
   bool _isLoading = false;
@@ -137,7 +159,8 @@ class AuthViewModel extends ChangeNotifier {
   /// Deletes the account in the cloud, then this phone's copy of the
   /// user's data. Returns null on success, or a message to show the user.
   Future<String?> deleteAccount(String password) async {
-    if (_currentUser == null) return 'You are signed out. Sign in again.';
+    final user = _currentUser;
+    if (user == null) return 'You are signed out. Sign in again.';
     final error = await _runAccountAction(
       () => _firebaseService.deleteAccount(password),
     );
@@ -145,7 +168,7 @@ class AuthViewModel extends ChangeNotifier {
     _currentUser = null;
     notifyListeners();
     try {
-      await _localData.wipe();
+      await _localData.wipe(uid: user.id);
     } on Exception catch (e) {
       // The account is already gone; leftovers here can't be tied back to
       // it, so the deletion still counts as done.

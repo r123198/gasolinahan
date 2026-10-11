@@ -64,14 +64,22 @@ class TrackerSummaryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                formatPesosExact(month.spent),
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.5,
-                  color: Colors.white,
-                  fontFeatures: _tabular,
+              // Big months and large text shrink the amount instead of
+              // pushing the fill-up count off the card.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    formatPesosExact(month.spent),
+                    style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                      color: Colors.white,
+                      fontFeatures: _tabular,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),

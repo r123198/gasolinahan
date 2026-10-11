@@ -60,6 +60,15 @@ void main() {
       expect(log.entries.first.costPerKm, 6);
     });
 
+    test('one reading has nothing to compare, so no better/worse flag', () {
+      final log = FillUpLog.build([
+        fill(300, 9000, 1, liters: 4),
+        fill(400, 9040, 2, liters: 4),
+      ]);
+      expect(log.entries.first.isAboveAverage, isNull);
+      expect(log.entries.first.isCheaperPerKm, isNull);
+    });
+
     test('ignores a non-increasing odometer instead of going negative', () {
       final log = FillUpLog.build([fill(500, 9100, 1), fill(600, 9000, 2)]);
       expect(log.entries.first.kmSincePrevious, isNull);

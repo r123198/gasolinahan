@@ -105,7 +105,7 @@ void main() {
         fillUps: [fill(1000, 10000, d1), fill(800, 10400, d5)],
         trips: const [],
       );
-      expect(i.costPerKm, 2.5); // 1000 pesos bought 400 km
+      expect(i.costPerKm, 2.0); // refilling 800 pesos after 400 km
     });
   });
 

@@ -6,10 +6,33 @@ import 'dart:io';
 import '../models/user_model.dart';
 import '../models/station_model.dart';
 import '../models/report_model.dart';
+import '../models/report_upload.dart';
+import 'report_writer.dart';
+import 'sync_service.dart';
+
+/// Thrown instead of trying to send while the phone has no network.
+class OfflineException implements Exception {
+  const OfflineException();
+
+  @override
+  String toString() => 'OfflineException: no network';
+}
 
 class FirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  FirebaseService() {
+    // Every signed-in session needs queued offline reports uploaded; this
+    // is constructed at start-up by the auth and dashboard view models.
+    SyncService.startAutoSync();
+  }
+
+  /// Sending a report gives up after this and queues it offline instead.
+  static const _submitTimeout = Duration(seconds: 15);
+
+  /// A sign-up's profile write gives up after this (the account exists).
+  static const _profileTimeout = Duration(seconds: 10);
 
   // ── Auth ──────────────────────────────────────────────
 
@@ -30,8 +53,6 @@ class FirebaseService {
     );
 
     final user = credential.user!;
-    await user.updateDisplayName(name);
-
     final userModel = UserModel(
       id: user.uid,
       name: name,
@@ -44,8 +65,30 @@ class FirebaseService {
       amountSaved: 0.0,
     );
 
-    await _firestore.collection('users').doc(user.uid).set(userModel.toMap());
-    return userModel;
+    // The account exists from here on: failing now would strand the user
+    // (signing up again says "email already in use"), so fall back to the
+    // sign-in path, and failing that to the profile we meant to write; it
+    // is created on the next getCurrentUser().
+    try {
+      await user.updateDisplayName(name);
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .set(userModel.toMap())
+          .timeout(_profileTimeout);
+      return userModel;
+    } on Exception catch (e) {
+      if (kDebugMode) print('signUp profile setup failed: $e');
+      try {
+        return await _getOrCreateUserDoc(
+          user,
+          name: name,
+        ).timeout(_profileTimeout);
+      } on Exception catch (e) {
+        if (kDebugMode) print('signUp profile fallback failed: $e');
+        return userModel;
+      }
+    }
   }
 
   Future<void> signOut() async {
@@ -150,15 +193,17 @@ class FirebaseService {
     try {
       await _profileImageRef(uid).delete();
     } on FirebaseException catch (e) {
-      // Most users never set a photo.
-      if (e.code != 'object-not-found') rethrow;
+      // Most users never set a photo; a project without Storage has none.
+      if (e.code != 'object-not-found' && e.code != 'bucket-not-found') {
+        rethrow;
+      }
     }
   }
 
   Reference _profileImageRef(String uid) =>
       FirebaseStorage.instance.ref().child('profile_images').child('$uid.jpg');
 
-  Future<UserModel> _getOrCreateUserDoc(User authUser) async {
+  Future<UserModel> _getOrCreateUserDoc(User authUser, {String? name}) async {
     final doc = await _firestore.collection('users').doc(authUser.uid).get();
 
     if (doc.exists) {
@@ -167,7 +212,7 @@ class FirebaseService {
 
     final userModel = UserModel(
       id: authUser.uid,
-      name: authUser.displayName ?? 'User',
+      name: authUser.displayName ?? name ?? 'User',
       email: authUser.email ?? '',
       profileImageUrl: authUser.photoURL ?? '',
       joinDate: DateTime.now().year.toString(),
@@ -202,6 +247,28 @@ class FirebaseService {
     return snapshot.docs
         .map((doc) => StationModel.fromMap(doc.data(), doc.id))
         .toList();
+  }
+
+  /// Stations within about [radiusMeters] of ([lat], [lng]), however long
+  /// since their last update. Firestore filters the latitude band (a
+  /// single-field range, no composite index); longitude is checked here.
+  Future<List<StationModel>> getStationsNear(
+    double lat,
+    double lng, {
+    double radiusMeters = 5000,
+  }) async {
+    final box = GeoBox.around(lat, lng, radiusMeters);
+    final snapshot = await _firestore
+        .collection('stations')
+        .where('latitude', isGreaterThanOrEqualTo: box.minLat)
+        .where('latitude', isLessThanOrEqualTo: box.maxLat)
+        .get();
+    return [
+      for (final doc in snapshot.docs)
+        if (StationModel.fromMap(doc.data(), doc.id) case final s
+            when box.contains(s.latitude, s.longitude))
+          s,
+    ];
   }
 
   /// Real-time stream of stations
@@ -298,85 +365,17 @@ class FirebaseService {
 
   // ── Price Reports ─────────────────────────────────────
 
-  Future<bool> submitPriceReport(
-    String stationId,
-    double regular,
-    double premium, {
-    double diesel = 0.0,
-    String stationName = '',
-    String brand = '',
-    String address = '',
-    double latitude = 0.0,
-    double longitude = 0.0,
-    Map<String, double> productPrices = const {},
-    int pointsAwarded = 0,
-    String pointsReason = '',
-    bool isPending = false,
-  }) async {
-    final authUser = _auth.currentUser;
-    if (authUser == null) {
-      if (kDebugMode) print('submitPriceReport: No auth user');
-      return false;
-    }
-    final points = isPending ? 0 : pointsAwarded;
+  /// A fresh report id, chosen before the first send attempt.
+  String newReportId() => ReportWriter(_firestore).newReportId();
 
-    try {
-      // Step 1: Create report document
-      final reportRef = await _firestore.collection('reports').add({
-        'userId': authUser.uid,
-        'stationId': stationId,
-        'reportedRegularPrice': regular,
-        'reportedPremiumPrice': premium,
-        'reportedDieselPrice': diesel,
-        'reportedProductPrices': productPrices,
-        'timestamp': FieldValue.serverTimestamp(),
-        'pointsAwarded': points,
-        'pointsReason': pointsReason,
-        // Unusual prices wait for review (and their points with them).
-        'status': isPending ? 'pending' : 'accepted',
-      });
-      if (kDebugMode) print('submitPriceReport: Report doc created');
-
-      // Step 2: Create or update station
-      final stationData = <String, dynamic>{
-        'lastUpdated': FieldValue.serverTimestamp(),
-      };
-      if (regular > 0) stationData['regularPrice'] = regular;
-      if (premium > 0) stationData['premiumPrice'] = premium;
-      if (diesel > 0) stationData['dieselPrice'] = diesel;
-      if (stationName.isNotEmpty) stationData['name'] = stationName;
-      if (brand.isNotEmpty) stationData['brand'] = brand;
-      if (address.isNotEmpty) stationData['address'] = address;
-      if (latitude != 0) stationData['latitude'] = latitude;
-      if (longitude != 0) stationData['longitude'] = longitude;
-      // set(merge: true) merges nested maps, so products missing from this
-      // report keep their last price.
-      if (productPrices.isNotEmpty) {
-        stationData['productPrices'] = productPrices;
-      }
-
-      await _firestore
-          .collection('stations')
-          .doc(stationId)
-          .set(stationData, SetOptions(merge: true));
-      if (kDebugMode) print('submitPriceReport: Station doc updated');
-
-      // Step 3: Count the report and award its points (see points_rules).
-      await _firestore.collection('users').doc(authUser.uid).set({
-        'reportsCount': FieldValue.increment(1),
-      }, SetOptions(merge: true));
-      await awardPoints(
-        authUser.uid,
-        points,
-        reason: pointsReason,
-        source: 'report:${reportRef.id}',
-      );
-      if (kDebugMode) print('submitPriceReport: User points updated');
-
-      return true;
-    } catch (e) {
-      if (kDebugMode) print('submitPriceReport ERROR: $e');
-      rethrow;
-    }
+  /// Sends [report] (report, station prices, count and points) as one
+  /// batch. Throws [OfflineException] without network, or the Firestore /
+  /// timeout error; the caller then queues it offline under the same
+  /// [ReportUpload.reportId], so a timed-out batch that still lands later
+  /// can't be counted twice.
+  Future<void> submitPriceReport(ReportUpload report) async {
+    if (!await hasNetwork()) throw const OfflineException();
+    await ReportWriter(_firestore).write(report).timeout(_submitTimeout);
+    notifyReportsUploaded();
   }
 }

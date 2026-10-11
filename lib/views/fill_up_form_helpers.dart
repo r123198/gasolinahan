@@ -94,6 +94,13 @@ extension _FillUpFormHelpers on _FillUpFormState {
     return brand.byCategory(grade).firstOrNull;
   }
 
+  /// Keeps the saved grade in step with a remembered product, so a Petron
+  /// XCS pick isn't stored (and priced) as last time's diesel.
+  void _matchFuelToProduct() {
+    final product = _product;
+    if (product != null) _fuel = FuelType.values.byName(product.category.name);
+  }
+
   /// Puts the looked-up area into an empty branch field.
   void _fillBranchFromArea() {
     final area = _suggestedArea;

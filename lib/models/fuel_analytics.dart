@@ -168,9 +168,9 @@ class FuelAnalytics {
       for (final f in ordered)
         if (f.effectivePricePerLiter case final p?) PriceRecord(f, p),
     ];
-    final span = ordered.length < 2
-        ? 0
-        : ordered.last.timestamp.difference(ordered.first.timestamp).inDays;
+    // Only the days the measured km were driven over: a gap skipped for an
+    // odometer typo or reset mustn't dilute the pace.
+    final span = tanks.fold(0, (s, t) => s + t.days);
 
     return FuelAnalytics._(
       tanks: List.unmodifiable(tanks),

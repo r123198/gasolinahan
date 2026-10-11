@@ -173,6 +173,7 @@ class _FillUpFormState extends State<_FillUpForm> {
           context.read<DashboardViewModel>().fuelType;
       _date = DateTime.now();
       _product = _defaultProduct(_highlightedBrand);
+      _matchFuelToProduct();
       _prefillPrice();
       _locate();
     }
@@ -218,6 +219,7 @@ class _FillUpFormState extends State<_FillUpForm> {
       final brand = _highlightedBrand;
       if (_product == null || brand?.productNamed(_product!.name) == null) {
         _product = _defaultProduct(brand);
+        _matchFuelToProduct();
       }
       _fillBranchFromArea();
       _prefillPrice();

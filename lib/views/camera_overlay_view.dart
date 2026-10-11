@@ -20,6 +20,10 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
   CameraController? _controller;
   bool _isInitialized = false;
   bool _isCapturing = false;
+
+  /// True while [_initCamera] runs, so a lifecycle resume arriving before
+  /// the first start finishes doesn't open a second controller.
+  bool _initializing = false;
   FlashMode _flashMode = FlashMode.auto;
   String? _errorMessage;
 
@@ -70,6 +74,8 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
   };
 
   Future<void> _initCamera() async {
+    if (_initializing) return;
+    _initializing = true;
     try {
       final cameras = await availableCameras();
       if (!mounted) return;
@@ -103,6 +109,8 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
     } on CameraException catch (e) {
       debugPrint('Camera init failed: ${e.code} ${e.description}');
       if (mounted) setState(() => _errorMessage = _friendlyCameraError(e));
+    } finally {
+      _initializing = false;
     }
   }
 
