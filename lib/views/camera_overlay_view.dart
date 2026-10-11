@@ -1,7 +1,7 @@
-import 'dart:ui' as ui;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../components/app_primary_button.dart';
+import '../components/report_camera_painters.dart';
 import '../ui/adaptive/app_spinner.dart';
 import '../ui/adaptive/app_toast.dart';
 import '../ui/adaptive/app_text_button.dart';
@@ -173,7 +173,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
           SizedBox(height: 16),
           Text(
             'Starting camera...',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+            style: TextStyle(color: Colors.white, fontSize: 14),
           ),
         ],
       ),
@@ -187,12 +187,12 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: Colors.white54, size: 48),
+            const Icon(Icons.error_outline, color: Colors.white, size: 48),
             const SizedBox(height: 16),
             Text(
               _errorMessage!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              style: const TextStyle(color: Colors.white, fontSize: 15),
             ),
             const SizedBox(height: 24),
             AppPrimaryButton(
@@ -226,7 +226,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
         // Dark overlay with cutout window
         Positioned.fill(
           child: IgnorePointer(
-            child: CustomPaint(painter: _ScanOverlayPainter()),
+            child: CustomPaint(painter: ScanOverlayPainter()),
           ),
         ),
 
@@ -269,7 +269,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
                         ),
                         SizedBox(width: 6),
                         Text(
-                          'Price Scanner',
+                          'Price scanner',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 13,
@@ -299,7 +299,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
           child: Column(
             children: [
               const Text(
-                'Scan Price Board',
+                'Scan the price board',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 22,
@@ -309,9 +309,10 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
               ),
               const SizedBox(height: 8),
               Text(
-                'Align the fuel price board within the frame',
+                'Fit the whole board inside the frame',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.70),
+                  color: Colors.white.withValues(alpha: 0.92),
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -332,7 +333,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
                 final left = 24.0;
                 final top = h * 0.28;
                 return CustomPaint(
-                  painter: _CornersPainter(
+                  painter: CornersPainter(
                     rect: Rect.fromLTWH(left, top, rectW, rectH),
                   ),
                 );
@@ -346,14 +347,14 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
           left: 32,
           right: 32,
           bottom: MediaQuery.of(context).size.height * 0.30,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 16,
+            runSpacing: 8,
             children: [
               _buildTip(Icons.wb_sunny_outlined, 'Good lighting'),
-              const SizedBox(width: 24),
               _buildTip(Icons.straighten_outlined, 'Hold steady'),
-              const SizedBox(width: 24),
-              _buildTip(Icons.crop_free_rounded, 'Fill frame'),
+              _buildTip(Icons.crop_free_rounded, 'Fill the frame'),
             ],
           ),
         ),
@@ -393,12 +394,12 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(_flashIcon, color: Colors.white70, size: 14),
+                        Icon(_flashIcon, color: Colors.white, size: 14),
                         const SizedBox(width: 6),
                         Text(
                           'Flash $_flashLabel',
                           style: const TextStyle(
-                            color: Colors.white70,
+                            color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -471,13 +472,13 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: Colors.white54),
+        Icon(icon, size: 16, color: Colors.white),
         const SizedBox(width: 4),
         Text(
           text,
           style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 11,
+            color: Colors.white,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -490,123 +491,38 @@ class _CameraOverlayViewState extends State<CameraOverlayView>
     required String label,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      label: label,
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.white, size: 22),
             ),
-            child: Icon(icon, color: Colors.white, size: 22),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-}
-
-/// Paints a dark overlay with a transparent rectangular cutout
-class _ScanOverlayPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.black.withValues(alpha: 0.55);
-
-    // Cutout rect — horizontally padded, vertically centered-upper
-    final rectW = size.width - 48;
-    final rectH = size.height * 0.35;
-    final left = 24.0;
-    final top = size.height * 0.28;
-    final cutout = RRect.fromRectAndRadius(
-      Rect.fromLTWH(left, top, rectW, rectH),
-      const Radius.circular(20),
-    );
-
-    // Full screen path minus cutout
-    final path = ui.Path()
-      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..addRRect(cutout);
-    path.fillType = ui.PathFillType.evenOdd;
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Paints corner brackets around the scan area
-class _CornersPainter extends CustomPainter {
-  final Rect rect;
-  _CornersPainter({required this.rect});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 3.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    const len = 28.0;
-    const r = 12.0;
-    final l = rect.left;
-    final t = rect.top;
-    final ri = rect.right;
-    final b = rect.bottom;
-
-    // Top-left
-    canvas.drawPath(
-      ui.Path()
-        ..moveTo(l, t + len)
-        ..lineTo(l, t + r)
-        ..quadraticBezierTo(l, t, l + r, t)
-        ..lineTo(l + len, t),
-      paint,
-    );
-    // Top-right
-    canvas.drawPath(
-      ui.Path()
-        ..moveTo(ri - len, t)
-        ..lineTo(ri - r, t)
-        ..quadraticBezierTo(ri, t, ri, t + r)
-        ..lineTo(ri, t + len),
-      paint,
-    );
-    // Bottom-left
-    canvas.drawPath(
-      ui.Path()
-        ..moveTo(l, b - len)
-        ..lineTo(l, b - r)
-        ..quadraticBezierTo(l, b, l + r, b)
-        ..lineTo(l + len, b),
-      paint,
-    );
-    // Bottom-right
-    canvas.drawPath(
-      ui.Path()
-        ..moveTo(ri - len, b)
-        ..lineTo(ri - r, b)
-        ..quadraticBezierTo(ri, b, ri, b - r)
-        ..lineTo(ri, b - len),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _CornersPainter oldDelegate) =>
-      oldDelegate.rect != rect;
 }

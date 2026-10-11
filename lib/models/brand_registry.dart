@@ -36,6 +36,18 @@ class BrandInfo {
 
   bool get isSvg => logoPath.endsWith('.svg');
 
+  /// Emblem-only version of the logo (no wordmark), for round badges.
+  String get markPath => logoPath.replaceFirst('/logos/', '/brand_marks/');
+
+  /// The emblem at [size], fitted inside a square.
+  Widget mark({double size = 24}) {
+    final path = markPath;
+    if (path.endsWith('.svg')) {
+      return SvgPicture.asset(path, width: size, height: size);
+    }
+    return Image.asset(path, width: size, height: size, fit: BoxFit.contain);
+  }
+
   /// Build the logo widget at a given size
   Widget logo({double size = 24}) {
     if (isSvg) {
@@ -361,6 +373,34 @@ class BrandRegistry {
     }
     return null;
   }
+
+  /// Other ways people type a brand in a station name.
+  static const _nameAliases = {
+    'Seaoil': ['sea oil'],
+    'Unioil': ['uni oil'],
+    'Flying V': ['flyingv', 'flying-v'],
+    'Cleanfuel': ['clean fuel'],
+  };
+
+  /// Other spellings of [brand] people type, lower-case.
+  static List<String> aliasesOf(BrandInfo brand) =>
+      _nameAliases[brand.name] ?? const [];
+
+  /// The brand named in free text such as "Petron Mayapa", matched on whole
+  /// words so "Totalis" isn't read as Total.
+  static BrandInfo? inferFromName(String text) {
+    final lower =
+        ' ${text.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]+'), ' ')} ';
+    for (final b in brands) {
+      final names = [b.name.toLowerCase(), ...?_nameAliases[b.name]];
+      if (names.any((n) => lower.contains(' $n '))) return b;
+    }
+    return null;
+  }
+
+  /// The stored brand if it's known, otherwise one read from [stationName].
+  static BrandInfo? match(String brand, {String stationName = ''}) =>
+      findByName(brand) ?? inferFromName(stationName);
 
   /// Detect brand from OCR text
   static BrandInfo? detectFromOcr(String ocrText) {

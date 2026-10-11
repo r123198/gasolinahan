@@ -17,7 +17,18 @@ class FillUp {
   final String notes;
 
   /// Receipt / pump photos, as paths inside the app's documents folder.
+  /// Device-only: photos are not uploaded.
   final List<String> photoPaths;
+
+  /// Firestore document id under users/{uid}/fill_ups; null until synced.
+  final String? remoteId;
+
+  /// Last change on any device; the newer side wins when syncing.
+  final DateTime? updatedAt;
+
+  /// Account that logged it on this device; null for rows saved before
+  /// sign-in scoping, which the next signed-in user claims.
+  final String? ownerUid;
 
   const FillUp({
     this.id,
@@ -32,7 +43,34 @@ class FillUp {
     required this.timestamp,
     this.notes = '',
     this.photoPaths = const [],
+    this.remoteId,
+    this.updatedAt,
+    this.ownerUid,
   });
+
+  FillUp copyWith({
+    int? id,
+    List<String>? photoPaths,
+    String? remoteId,
+    DateTime? updatedAt,
+    String? ownerUid,
+  }) => FillUp(
+    id: id ?? this.id,
+    stationId: stationId,
+    stationName: stationName,
+    brand: brand,
+    fuelType: fuelType,
+    amountSpent: amountSpent,
+    liters: liters,
+    pricePerLiter: pricePerLiter,
+    odometerKm: odometerKm,
+    timestamp: timestamp,
+    notes: notes,
+    photoPaths: photoPaths ?? this.photoPaths,
+    remoteId: remoteId ?? this.remoteId,
+    updatedAt: updatedAt ?? this.updatedAt,
+    ownerUid: ownerUid ?? this.ownerUid,
+  );
 
   /// Price per liter as entered, or worked out from amount and liters.
   double? get effectivePricePerLiter {
@@ -60,8 +98,38 @@ class FillUp {
       photoPaths: photos == null || photos.isEmpty
           ? const []
           : List<String>.unmodifiable(jsonDecode(photos) as List),
+      remoteId: map['remoteId'] as String?,
+      updatedAt: _parseDate(map['updatedAt']),
+      ownerUid: map['ownerUid'] as String?,
     );
   }
+
+  /// A fill-up as stored in Firestore (no local id, owner or photos).
+  factory FillUp.fromRemote(Map<String, dynamic> map, String docId) =>
+      FillUp.fromMap({
+        ...map,
+        'id': null,
+        'photoPaths': null,
+        'ownerUid': null,
+        'remoteId': docId,
+      });
+
+  Map<String, dynamic> toRemoteMap() => {
+    'stationId': stationId,
+    'stationName': stationName,
+    'brand': brand,
+    'fuelType': fuelType,
+    'amountSpent': amountSpent,
+    'liters': liters,
+    'pricePerLiter': pricePerLiter,
+    'odometerKm': odometerKm,
+    'timestamp': timestamp.toIso8601String(),
+    'notes': notes,
+    'updatedAt': (updatedAt ?? timestamp).toIso8601String(),
+  };
+
+  static DateTime? _parseDate(Object? value) =>
+      value is String ? DateTime.tryParse(value) : null;
 
   Map<String, dynamic> toMap() {
     return {
@@ -77,6 +145,9 @@ class FillUp {
       'timestamp': timestamp.toIso8601String(),
       'notes': notes,
       'photoPaths': jsonEncode(photoPaths),
+      'remoteId': remoteId,
+      'updatedAt': updatedAt?.toIso8601String(),
+      'ownerUid': ownerUid,
     };
   }
 }

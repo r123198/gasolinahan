@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../ui/adaptive/app_dialog.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_tappable.dart';
 import '../ui/app_theme.dart';
@@ -8,7 +9,8 @@ import '../ui/tracker_format.dart';
 import '../viewmodels/trip_viewmodel.dart';
 import '../views/trip_history_sheet.dart';
 
-const _trackingRed = Color(0xFFDC2626);
+/// Stop icon on the black "tracking" pill (6.0:1 on ink).
+const _recordingRed = Color(0xFFF87171);
 
 /// "Track me" pill for the map. Trips also start on their own when driving is
 /// detected, so this mostly shows status; pressing it starts or stops by hand.
@@ -51,6 +53,19 @@ class TrackMeButton extends StatelessWidget {
       await vm.stopNow();
       return;
     }
+    final agreed = await showAppConfirmDialog(
+      context: context,
+      title: 'Track this trip?',
+      message:
+          'Gasolinahan will use your location for the whole trip — even '
+          'with the app in the background or your screen off — to measure '
+          'how far you drive and what it costs.\n\n'
+          'Your route stays on this phone. Tap Stop whenever you want to '
+          'end tracking.',
+      confirmLabel: 'Start tracking',
+      cancelLabel: 'Not now',
+    );
+    if (!agreed || !context.mounted) return;
     await vm.trackNow();
     if (!context.mounted) return;
     if (vm.permissionDenied) {
@@ -82,7 +97,7 @@ class _Pill extends StatelessWidget {
     final foreground = isActive ? Colors.white : AppColors.ink;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isActive ? _trackingRed : Colors.white,
+        color: isActive ? AppColors.ink : Colors.white,
         borderRadius: BorderRadius.circular(999),
         boxShadow: const [
           BoxShadow(
@@ -102,7 +117,11 @@ class _Pill extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 18, color: foreground),
+                Icon(
+                  icon,
+                  size: 18,
+                  color: isActive ? _recordingRed : foreground,
+                ),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(

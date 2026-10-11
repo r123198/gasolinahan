@@ -2,17 +2,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gasolinahan/models/fill_up_log.dart';
 import 'package:gasolinahan/models/fill_up_model.dart';
 
-FillUp fill(double spent, double odo, int day, {double? liters, int? id}) {
+FillUp fill(
+  double spent,
+  double odo,
+  int day, {
+  double? liters,
+  int? id,
+  String fuel = 'regular',
+  int month = 9,
+}) {
   return FillUp(
     id: id,
     stationId: 's',
     stationName: 'SeaOil Mayapa',
     brand: 'SeaOil',
-    fuelType: 'regular',
+    fuelType: fuel,
     amountSpent: spent,
     liters: liters,
     odometerKm: odo,
-    timestamp: DateTime(2026, 9, day),
+    timestamp: DateTime(2026, month, day),
   );
 }
 
@@ -66,6 +74,47 @@ void main() {
       expect(log.averageKmPerLiter, closeTo(7.5, 0.001));
       expect(log.entries[1].isAboveAverage, isTrue);
       expect(log.entries[0].isAboveAverage, isFalse);
+    });
+  });
+
+  group('comparisons', () {
+    test('price delta compares with your other fills of the same fuel', () {
+      final log = FillUpLog.build([
+        fill(800, 9000, 1, liters: 10), // ₱80/L
+        fill(840, 9100, 2, liters: 10), // pricey/L
+        fill(1000, 9200, 3, liters: 10, fuel: 'diesel'), // other fuel
+        fill(820, 9300, 4, liters: 10), // ₱82/L, avg of others = 82
+      ]);
+      expect(log.entries.first.priceDelta, closeTo(0, 0.001));
+      final pricey = log.entries.firstWhere((e) => e.fillUp.odometerKm == 9100);
+      expect(pricey.priceDelta, closeTo(3, 0.001)); // vs (80 + 82) / 2
+    });
+
+    test('no price delta without another fill of that fuel', () {
+      final log = FillUpLog.build([fill(800, 9000, 1, liters: 10)]);
+      expect(log.entries.single.priceDelta, isNull);
+    });
+
+    test('flags cheaper-per-km tanks against the average', () {
+      final log = FillUpLog.build([
+        fill(500, 9000, 1),
+        fill(500, 9100, 2), // ₱5/km
+        fill(500, 9150, 3), // ₱10/km
+      ]);
+      expect(log.averageCostPerKm, closeTo(7.5, 0.001));
+      expect(log.entries[1].isCheaperPerKm, isTrue);
+      expect(log.entries[0].isCheaperPerKm, isFalse);
+    });
+
+    test('sums spending for the current month only', () {
+      final log = FillUpLog.build([
+        fill(500, 9000, 28, month: 9),
+        fill(700, 9100, 2, month: 10),
+        fill(300, 9200, 5, month: 10),
+      ]);
+      final month = log.monthSummary(DateTime(2026, 10, 10));
+      expect(month.spent, 1000);
+      expect(month.fillUps, 2);
     });
   });
 }

@@ -8,6 +8,16 @@ service cloud.firestore {
     // Profile, points and saved stations belong to the owner.
     match /users/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
+
+      // Fill-up log, synced across the owner's devices.
+      match /fill_ups/{fillUpId} {
+        allow read, delete: if isSignedIn() && request.auth.uid == uid;
+        allow create, update: if isSignedIn() && request.auth.uid == uid
+                              && request.resource.data.amountSpent is number
+                              && request.resource.data.amountSpent > 0
+                              && request.resource.data.odometerKm is number
+                              && request.resource.data.timestamp is string;
+      }
     }
 
     // Crowdsourced prices: anyone signed in can read and contribute.

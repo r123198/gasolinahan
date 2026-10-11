@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +19,7 @@ import '../ui/adaptive/app_toast.dart';
 import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
 import '../viewmodels/auth_viewmodel.dart';
+import '../viewmodels/fill_up_viewmodel.dart';
 import 'account_sheets.dart';
 import 'notifications_settings_view.dart';
 import 'plus_view.dart';
@@ -115,7 +118,10 @@ class _ProfileViewState extends State<ProfileView> {
       isDestructive: true,
     );
     if (!confirmed || !mounted) return;
+    final fillUps = context.read<FillUpViewModel>();
     await context.read<AuthViewModel>().signOut();
+    // Signed out, the log shows no account's fill-ups.
+    unawaited(fillUps.load());
     if (!mounted) return;
     // Clear the whole stack so Back can't return to signed-in screens.
     Navigator.of(

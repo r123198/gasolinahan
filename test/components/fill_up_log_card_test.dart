@@ -53,7 +53,7 @@ void main() {
     await pump(tester, log.entries.first);
     expect(find.text('Sep 27, 2026'), findsOneWidget);
     expect(find.text('₱755.47'), findsOneWidget);
-    expect(find.text('9,129 km'), findsOneWidget);
+    expect(find.text('Odometer 9,129 km'), findsOneWidget);
     expect(find.text('+63 km'), findsOneWidget);
     expect(find.textContaining('9.213 L'), findsOneWidget);
     expect(find.textContaining('₱82.00/L'), findsOneWidget);

@@ -1,10 +1,9 @@
-import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/material.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_text_button.dart';
 import '../ui/app_theme.dart';
-import '../ui/adaptive/app_platform.dart';
+import '../components/app_primary_button.dart';
 
 class ReportOnboardingView extends StatefulWidget {
   const ReportOnboardingView({super.key});
@@ -17,18 +16,14 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
   final _controller = PageController();
   int _currentPage = 0;
 
-  static const _green = AppColors.goStrong;
-  static const _charcoal = Color(0xFF111827);
-  static const _grey = AppColors.textMuted;
-
   static const _pages = [
     _OnboardingPage(
       image: null,
       icon: Icons.camera_alt_rounded,
-      title: 'Report Fuel Prices',
+      title: 'Report fuel prices',
       subtitle:
           'Help fellow drivers by reporting the latest fuel prices at stations near you. '
-          'It only takes a few seconds!',
+          'It only takes a few seconds.',
       tips: [
         _Tip(Icons.location_on_rounded, 'Go to a gas station'),
         _Tip(Icons.camera_alt_rounded, 'Take a photo of the price board'),
@@ -38,7 +33,7 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
     _OnboardingPage(
       image: 'assets/images/samples/priceboard_shell.jpg',
       icon: null,
-      title: 'Capture the Price Board',
+      title: 'Capture the price board',
       subtitle:
           'Point your camera at the station\'s price board like this. '
           'Make sure the prices and brand name are clearly visible.',
@@ -53,7 +48,7 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
     _OnboardingPage(
       image: null,
       icon: Icons.rate_review_rounded,
-      title: 'Review & Submit',
+      title: 'Review and submit',
       subtitle:
           'After scanning, you can review the detected prices and station before '
           'submitting. You can also correct any values if needed.',
@@ -71,9 +66,13 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
     if (_isLastPage) {
       Navigator.pop(context, true);
     } else {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _controller.jumpToPage(_currentPage + 1);
+        return;
+      }
       _controller.nextPage(
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -87,7 +86,7 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -98,10 +97,11 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   AppIconButton(
+                    tooltip: 'Close',
                     onPressed: () => Navigator.pop(context, false),
                     icon: const Icon(
                       Icons.close_rounded,
-                      color: _grey,
+                      color: AppColors.textMuted,
                       size: 24,
                     ),
                   ),
@@ -111,7 +111,7 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
                       'Skip',
                       style: TextStyle(
                         fontFamily: AppTheme.fontFamily,
-                        color: _grey,
+                        color: AppColors.textMuted,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -143,34 +143,17 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
                       dotWidth: 8,
                       dotHeight: 8,
                       spacing: 10,
-                      dotColor: _charcoal.withValues(alpha: 0.12),
-                      activeDotColor: _charcoal,
+                      dotColor: AppColors.divider,
+                      activeDotColor: AppColors.ink,
                     ),
                   ),
                   const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: isCupertino(context)
-                        ? CupertinoButton(
-                            onPressed: _next,
-                            padding: EdgeInsets.zero,
-                            color: _isLastPage ? _green : _charcoal,
-                            borderRadius: BorderRadius.circular(16),
-                            child: _buildNextButtonContent(),
-                          )
-                        : ElevatedButton(
-                            onPressed: _next,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _isLastPage ? _green : _charcoal,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: _buildNextButtonContent(),
-                          ),
+                  AppPrimaryButton(
+                    label: _isLastPage ? 'Start scanning' : 'Next',
+                    trailingIcon: _isLastPage
+                        ? Icons.photo_camera_outlined
+                        : Icons.arrow_forward_rounded,
+                    onPressed: _next,
                   ),
                 ],
               ),
@@ -178,29 +161,6 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildNextButtonContent() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          _isLastPage ? 'Start Scanning' : 'Next',
-          style: const TextStyle(
-            fontFamily: AppTheme.fontFamily,
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Icon(
-          _isLastPage ? Icons.camera_alt_rounded : Icons.arrow_forward_rounded,
-          size: 20,
-          color: Colors.white,
-        ),
-      ],
     );
   }
 
@@ -219,24 +179,28 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
                 height: 240,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
+                  color: AppColors.surfaceMuted,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Image.asset(page.image!, fit: BoxFit.cover),
+                child: Image.asset(
+                  page.image!,
+                  fit: BoxFit.cover,
+                  semanticLabel: 'Example of a clear price board photo',
+                ),
               ),
             )
           else
             Container(
               width: 120,
               height: 120,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: _green.withValues(alpha: 0.10),
+                color: AppColors.surface,
               ),
-              child: const Icon(
-                Icons.local_gas_station_rounded,
+              child: Icon(
+                page.icon ?? Icons.local_gas_station_rounded,
                 size: 52,
-                color: _green,
+                color: AppColors.distance,
               ),
             ),
 
@@ -247,11 +211,10 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
             page.title,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 26,
+              fontSize: 24,
               fontWeight: FontWeight.w700,
-              color: _charcoal,
-              letterSpacing: -0.5,
-              height: 1.2,
+              color: AppColors.text,
+              height: 1.25,
             ),
           ),
           const SizedBox(height: 10),
@@ -261,9 +224,8 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
             page.subtitle,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: _grey,
+              fontSize: 15,
+              color: AppColors.textMuted,
               height: 1.5,
             ),
           ),
@@ -277,16 +239,8 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFF1F5F9)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x08000000),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
                 ),
                 child: Row(
                   children: [
@@ -294,19 +248,19 @@ class _ReportOnboardingViewState extends State<ReportOnboardingView> {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: _charcoal.withValues(alpha: 0.06),
+                        color: AppColors.surfaceMuted,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(tip.icon, size: 18, color: _charcoal),
+                      child: Icon(tip.icon, size: 18, color: AppColors.ink),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Text(
                         tip.text,
                         style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF334155),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.text,
                         ),
                       ),
                     ),

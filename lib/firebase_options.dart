@@ -58,7 +58,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDdFK8QQ8PoiYLpqjVKKbyVHi-833NkdvU',
-    appId: '1:942344185423:android:8b178aea084d60c575ec3a',
+    appId: '1:942344185423:android:79eafa07d4103cd275ec3a',
     messagingSenderId: '942344185423',
     projectId: 'gasolinahan-e0917',
     storageBucket: 'gasolinahan-e0917.firebasestorage.app',
@@ -66,10 +66,10 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDSTMepsA0qsc7TRHF2Bwl6Trs508dWl50',
-    appId: '1:942344185423:ios:4b871fbfa75ac3ed75ec3a',
+    appId: '1:942344185423:ios:ae814f1d5f51faf375ec3a',
     messagingSenderId: '942344185423',
     projectId: 'gasolinahan-e0917',
     storageBucket: 'gasolinahan-e0917.firebasestorage.app',
-    iosBundleId: 'com.example.gasolinahan',
+    iosBundleId: 'com.maalam.gasolinahan',
   );
 }

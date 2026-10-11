@@ -34,21 +34,35 @@ class InsightsCard extends StatelessWidget {
           const Text(
             'Since your last fill-up',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: FontWeight.w700,
               color: AppColors.textMuted,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            '${formatKmShort(insights.kmSinceLastFill ?? 0)} tracked',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.5,
-              color: Color(0xFF111827),
+          if ((insights.kmSinceLastFill ?? 0) > 0)
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: formatKmShort(insights.kmSinceLastFill!),
+                    style: const TextStyle(color: AppColors.distance),
+                  ),
+                  const TextSpan(text: ' driven'),
+                ],
+              ),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            )
+          else
+            const Text(
+              'No drives tracked yet',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
-          ),
           const SizedBox(height: 12),
           if (fraction != null && left != null && typical != null) ...[
             ClipRRect(
@@ -57,9 +71,7 @@ class InsightsCard extends StatelessWidget {
                 value: fraction,
                 minHeight: 8,
                 backgroundColor: const Color(0xFFF1F5F9),
-                color: fraction > 0.85
-                    ? const Color(0xFFDC2626)
-                    : const Color(0xFF22C55E),
+                color: fraction > 0.85 ? AppColors.bad : AppColors.go,
               ),
             ),
             const SizedBox(height: 8),
@@ -70,12 +82,14 @@ class InsightsCard extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF475569),
+                color: AppColors.text,
               ),
             ),
           ] else
             const Text(
-              'Log one more fill-up to see how far a tank usually lasts.',
+              'Trips record on their own while you drive, or tap Track me '
+              'on the Prices tab. Your next fill-up shows how far a tank '
+              'lasts.',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

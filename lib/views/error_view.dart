@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/report_viewmodel.dart';
 import '../components/app_primary_button.dart';
-import '../ui/adaptive/app_icon_button.dart';
+import '../components/app_circle_button.dart';
 import '../ui/app_theme.dart';
 
 class ErrorView extends StatelessWidget {
@@ -21,144 +21,133 @@ class ErrorView extends StatelessWidget {
 
     if (error.contains('doesn\'t look like a fuel price board')) {
       icon = Icons.image_not_supported_outlined;
-      title = 'Not a Price Board';
+      title = 'Not a price board';
       subtitle = error;
       showRetry = true;
     } else if (error.contains('Could not find any fuel prices')) {
       icon = Icons.search_off_rounded;
-      title = 'No Prices Found';
+      title = 'No prices found';
       subtitle = error;
       showRetry = true;
     } else if (error.contains('doesn\'t appear to be taken with a camera')) {
       icon = Icons.no_photography_outlined;
-      title = 'Invalid Image';
+      title = 'Photo not from a camera';
       subtitle = error;
       showRetry = true;
     } else if (error.contains('image appears to be old')) {
       icon = Icons.history_rounded;
-      title = 'Stale Image';
+      title = 'Photo is too old';
       subtitle = error;
       showRetry = true;
     } else if (error.contains('resolution is too low')) {
       icon = Icons.broken_image_outlined;
-      title = 'Low Quality Image';
+      title = 'Photo is too blurry';
       subtitle = error;
       showRetry = true;
     } else if (error.contains('No gas stations found nearby')) {
       icon = Icons.location_off_rounded;
-      title = 'No Stations Nearby';
+      title = 'No stations nearby';
       subtitle = error;
       showRetry = false;
     } else if (error.contains('Could not open camera')) {
       icon = Icons.camera_alt_outlined;
-      title = 'Camera Error';
+      title = 'Camera problem';
       subtitle = error;
       showRetry = true;
     } else if (error.contains('Image file not found')) {
       icon = Icons.broken_image_outlined;
-      title = 'Image Not Found';
+      title = 'Photo not found';
       subtitle = error;
       showRetry = true;
     } else {
       icon = Icons.error_outline_rounded;
-      title = 'Something Went Wrong';
+      title = 'Something went wrong';
       subtitle = error;
       showRetry = true;
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Row(
                 children: [
-                  AppIconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
+                  AppCircleButton(
+                    icon: Icons.arrow_back,
+                    tooltip: 'Back',
                     onPressed: () => Navigator.pop(context),
-                  ),
-                  const Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(right: 48),
-                      child: Text(
-                        'Report Issue',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 48),
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                children: [
+                  Center(
+                    child: Container(
+                      width: 112,
+                      height: 112,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFEF3C7),
                         shape: BoxShape.circle,
                       ),
-                      child: Center(
-                        child: Icon(icon, size: 56, color: Colors.red.shade400),
-                      ),
+                      child: Icon(icon, size: 52, color: AppColors.bad),
                     ),
-                    const SizedBox(height: 32),
-                    Text(
+                  ),
+                  const SizedBox(height: 24),
+                  Semantics(
+                    header: true,
+                    liveRegion: true,
+                    child: Text(
                       title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      subtitle,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textMuted,
-                        height: 1.5,
-                      ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    subtitle,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: AppColors.textMuted,
+                      height: 1.5,
                     ),
-                    const SizedBox(height: 40),
-                    if (showRetry)
-                      AppPrimaryButton(
-                        label: 'Try Again',
-                        borderRadius: 32,
-                        onPressed: () {
-                          vm.reset();
-                          Navigator.pushReplacementNamed(context, '/report');
-                        },
-                      ),
-                    if (showRetry) const SizedBox(height: 16),
-                    AppSecondaryButton(
-                      label: 'Back to Home',
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              child: Column(
+                children: [
+                  if (showRetry) ...[
+                    AppPrimaryButton(
+                      label: 'Try again',
+                      trailingIcon: Icons.photo_camera_outlined,
                       onPressed: () {
                         vm.reset();
-                        Navigator.pushNamedAndRemoveUntil(
-                          context,
-                          '/dashboard',
-                          (route) => false,
-                        );
+                        Navigator.pushReplacementNamed(context, '/report');
                       },
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 12),
                   ],
-                ),
+                  AppSecondaryButton(
+                    label: 'Back to home',
+                    onPressed: () {
+                      vm.reset();
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/dashboard',
+                        (route) => false,
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
           ],

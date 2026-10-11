@@ -5,9 +5,18 @@ import 'offline_database_service.dart';
 class FillUpService {
   static const _table = 'fill_ups';
 
-  Future<List<FillUp>> getAll() async {
+  /// Fill-ups for [ownerUid] plus rows saved before accounts were tracked
+  /// (owner null), newest first.
+  Future<List<FillUp>> getAll({String? ownerUid}) async {
     final db = await OfflineDatabaseService.database;
-    final rows = await db.query(_table, orderBy: 'timestamp DESC');
+    final rows = await db.query(
+      _table,
+      where: ownerUid == null
+          ? 'ownerUid IS NULL'
+          : 'ownerUid = ? OR ownerUid IS NULL',
+      whereArgs: ownerUid == null ? null : [ownerUid],
+      orderBy: 'timestamp DESC',
+    );
     return rows.map(FillUp.fromMap).toList();
   }
 

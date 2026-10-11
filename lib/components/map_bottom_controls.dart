@@ -90,6 +90,8 @@ class _NearbyBar extends StatelessWidget {
     return Semantics(
       button: true,
       label: 'Show $count nearby stations',
+      // excludeSemantics hides the InkWell's action, so declare it here.
+      onTap: onTap,
       excludeSemantics: true,
       child: DecoratedBox(
         decoration: BoxDecoration(

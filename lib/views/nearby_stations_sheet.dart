@@ -55,7 +55,7 @@ List<StationModel> filterStations(List<StationModel> stations, String query) {
   return stations
       .where(
         (s) =>
-            s.name.toLowerCase().contains(q) ||
+            s.displayName.toLowerCase().contains(q) ||
             s.brand.toLowerCase().contains(q) ||
             s.address.toLowerCase().contains(q),
       )
@@ -129,7 +129,8 @@ class _NearbyStations extends StatelessWidget {
                       ? 'No stations found'
                       : 'No stations match "$query"',
                   subtitle: vm.onlyWithPrices
-                      ? 'Try turning off "With prices".'
+                      ? 'Turn off "With ${_fuelLabels[vm.fuelType]} price" '
+                            'to see every station.'
                       : 'Try a different name or area.',
                 ),
               )
@@ -187,7 +188,12 @@ class _Header extends StatelessWidget {
             ),
           ),
           FilterChip(
-            label: const Text('With prices'),
+            label: Text('With ${_fuelLabels[vm.fuelType]} price'),
+            tooltip: vm.onlyWithPrices
+                ? 'Showing only stations with a ${_fuelLabels[vm.fuelType]} '
+                      'price. Tap to show all.'
+                : 'Tap to hide stations without a '
+                      '${_fuelLabels[vm.fuelType]} price',
             selected: vm.onlyWithPrices,
             onSelected: (_) => vm.toggleOnlyWithPrices(),
           ),
@@ -245,7 +251,9 @@ class _StationRow extends StatelessWidget {
                   color: Colors.white,
                   shape: BoxShape.circle,
                 ),
-                child: ExcludeSemantics(child: brandLogoWidget(s.brand, 30)),
+                child: ExcludeSemantics(
+                  child: brandLogoWidget(s.brand, 30, stationName: s.name),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -262,7 +270,7 @@ class _StationRow extends StatelessWidget {
                         ),
                       ),
                     Text(
-                      s.name,
+                      s.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

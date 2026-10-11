@@ -11,16 +11,16 @@ import '../ui/app_theme.dart';
 import '../ui/tracker_format.dart';
 import 'brand_logo.dart';
 
-const _fuelLabels = {
-  'regular': 'Regular',
-  'premium': 'Premium',
-  'diesel': 'Diesel',
-};
+const _tabular = [FontFeature.tabularFigures()];
+
+/// Below this, a price difference reads as "about your usual".
+const _samePriceThreshold = 0.10;
 
 enum FillUpAction { edit, delete }
 
-/// One fill-up in the Tracker log: what was paid, the odometer, and the
-/// efficiency since the previous fill-up.
+/// One fill-up in the Tracker log. The total paid leads; colour then sorts
+/// the rest by kind — indigo distance, teal fuel, green/amber for better or
+/// worse than the user's own average (always with an arrow and words).
 class FillUpLogCard extends StatelessWidget {
   final FillUpLogEntry entry;
   final ValueChanged<FillUpAction> onAction;
@@ -62,16 +62,28 @@ class FillUpLogCard extends StatelessWidget {
       child: AppTappable(
         onTap: () => onAction(FillUpAction.edit),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 4, 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 4, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Header(entry: entry, onMore: () => _showMenu(context)),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(0, 12, 12, 8),
-                child: Divider(),
+              _Header(
+                entry: entry,
+                onStationTap: onStationTap,
+                onMore: () => _showMenu(context),
               ),
-              _Details(entry: entry, onStationTap: onStationTap),
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 12),
+                    _FuelLine(entry: entry),
+                    const SizedBox(height: 12),
+                    _StatTiles(entry: entry),
+                    _Extras(entry: entry),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -80,110 +92,94 @@ class FillUpLogCard extends StatelessWidget {
   }
 }
 
+/// Logo, station + fuel grade, date, and the amount paid as the lead number.
 class _Header extends StatelessWidget {
   final FillUpLogEntry entry;
+  final VoidCallback onStationTap;
   final VoidCallback onMore;
 
-  const _Header({required this.entry, required this.onMore});
+  const _Header({
+    required this.entry,
+    required this.onStationTap,
+    required this.onMore,
+  });
 
   @override
   Widget build(BuildContext context) {
     final fill = entry.fillUp;
-    final liters = fill.liters;
-    final price = fill.effectivePricePerLiter;
-    final fuel = _fuelLabels[fill.fuelType] ?? fill.fuelType;
-    const tabular = [FontFeature.tabularFigures()];
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
           width: 48,
           height: 48,
-          padding: const EdgeInsets.all(8),
+          margin: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: brandAccent(fill.brand).withValues(alpha: 0.10),
+            color: Colors.white,
             shape: BoxShape.circle,
+            border: Border.all(color: AppColors.divider),
           ),
-          child: ExcludeSemantics(child: brandLogoWidget(fill.brand, 32)),
+          child: ExcludeSemantics(
+            child: brandLogoWidget(
+              fill.brand,
+              34,
+              stationName: fill.stationName,
+            ),
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Semantics(
+                button: true,
+                label: 'Station ${fill.stationName}, show history',
+                child: AppTappable(
+                  onTap: onStationTap,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            fill.stationName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _FuelPill(fuelType: fill.fuelType),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               Text(
                 formatDate(fill.timestamp),
                 style: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w500,
                   color: AppColors.textMuted,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Text(
                 formatPesosExact(fill.amountSpent),
                 style: const TextStyle(
-                  fontSize: 18,
+                  fontSize: 24,
                   fontWeight: FontWeight.w700,
-                  fontFeatures: tabular,
+                  letterSpacing: -0.5,
+                  fontFeatures: _tabular,
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text.rich(
-                TextSpan(
-                  children: [
-                    const WidgetSpan(
-                      alignment: PlaceholderAlignment.middle,
-                      child: Padding(
-                        padding: EdgeInsets.only(right: 4),
-                        child: Icon(
-                          Icons.water_drop_outlined,
-                          size: 16,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                    TextSpan(
-                      text: liters == null
-                          ? 'Liters not set'
-                          : formatLiters(liters),
-                    ),
-                    if (price != null)
-                      TextSpan(text: '  →  ${formatPricePerLiter(price)}'),
-                    TextSpan(
-                      text: '  ·  $fuel',
-                      style: const TextStyle(color: AppColors.textMuted),
-                    ),
-                  ],
-                ),
-                style: const TextStyle(fontSize: 14, fontFeatures: tabular),
               ),
             ],
           ),
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              formatKm(fill.odometerKm),
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                fontFeatures: tabular,
-              ),
-            ),
-            if (entry.kmSincePrevious != null)
-              Text(
-                formatKmDelta(entry.kmSincePrevious!),
-                semanticsLabel:
-                    '${entry.kmSincePrevious!.round()} km since last fill-up',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textMuted,
-                  fontFeatures: tabular,
-                ),
-              ),
-          ],
         ),
         AppIconButton(
           tooltip: 'More options',
@@ -195,148 +191,381 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _Details extends StatelessWidget {
-  final FillUpLogEntry entry;
-  final VoidCallback onStationTap;
+/// Grade pill in the colours used on PH pumps.
+class _FuelPill extends StatelessWidget {
+  final String fuelType;
 
-  const _Details({required this.entry, required this.onStationTap});
+  const _FuelPill({required this.fuelType});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color, tint) = switch (fuelType) {
+      'premium' => ('Premium', AppColors.fuelPremium, const Color(0xFFFEE2E2)),
+      'diesel' => ('Diesel', AppColors.fuelDiesel, AppColors.goTint),
+      _ => ('Regular', AppColors.fuelRegular, const Color(0xFFDBEAFE)),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// "10.417 L at ₱96.00/L" plus how that price compares with the user's
+/// usual for this fuel.
+class _FuelLine extends StatelessWidget {
+  final FillUpLogEntry entry;
+
+  const _FuelLine({required this.entry});
 
   @override
   Widget build(BuildContext context) {
     final fill = entry.fillUp;
-    final kmPerLiter = entry.kmPerLiter;
-    final costPerKm = entry.costPerKm;
-    final photos = fill.photoPaths;
-    return Column(
+    final liters = fill.liters;
+    final price = fill.effectivePricePerLiter;
+    final delta = entry.priceDelta;
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 6,
       children: [
-        if (kmPerLiter != null || costPerKm != null)
-          _DetailRow(
-            icon: entry.isAboveAverage ? Icons.trending_up : Icons.show_chart,
-            iconColor: entry.isAboveAverage ? AppColors.goStrong : null,
-            semanticsLabel: [
-              if (kmPerLiter != null)
-                '${kmPerLiter.toStringAsFixed(2)} kilometers per liter',
-              if (entry.isAboveAverage) 'better than your average',
-              if (costPerKm != null)
-                '${costPerKm.toStringAsFixed(2)} pesos per kilometer',
-            ].join(', '),
-            child: Text.rich(
+        Text.rich(
+          TextSpan(
+            children: [
+              const WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Icon(
+                    Icons.water_drop,
+                    size: 16,
+                    color: AppColors.fuel,
+                  ),
+                ),
+              ),
               TextSpan(
-                children: [
-                  if (kmPerLiter != null)
-                    TextSpan(
-                      text: '${kmPerLiter.toStringAsFixed(2)} km/L',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: entry.isAboveAverage
-                            ? AppColors.goStrong
-                            : AppColors.text,
-                      ),
-                    ),
-                  if (kmPerLiter != null && costPerKm != null)
-                    const TextSpan(text: '   '),
-                  if (costPerKm != null)
-                    TextSpan(text: formatCostPerKm(costPerKm)),
-                ],
+                text: liters == null ? 'Liters not set' : formatLiters(liters),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.fuel,
+                ),
               ),
-              style: const TextStyle(
-                fontSize: 14,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-            ),
+              if (price != null)
+                TextSpan(
+                  text: ' at ${formatPricePerLiter(price)}',
+                  style: const TextStyle(color: AppColors.text),
+                ),
+            ],
           ),
-        _DetailRow(
-          icon: Icons.place_outlined,
-          onTap: onStationTap,
-          semanticsLabel: 'Station ${fill.stationName}, show history',
-          child: Text(
-            fill.stationName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 14),
-          ),
+          style: const TextStyle(fontSize: 15, fontFeatures: _tabular),
         ),
-        if (fill.notes.isNotEmpty)
-          _DetailRow(
-            icon: Icons.sticky_note_2_outlined,
-            child: Text(
-              fill.notes,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
-        if (photos.isNotEmpty)
-          _DetailRow(
-            icon: Icons.photo_camera_outlined,
-            onTap: () => showFillUpPhotos(context, photos),
-            semanticsLabel: '${photos.length} photos, view',
-            child: Text(
-              photos.length == 1 ? '1 photo' : '${photos.length} photos',
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
+        if (delta != null) _PriceVsUsual(delta: delta),
       ],
     );
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  final IconData icon;
-  final Color? iconColor;
-  final Widget child;
-  final VoidCallback? onTap;
-  final String? semanticsLabel;
+class _PriceVsUsual extends StatelessWidget {
+  final double delta;
 
-  const _DetailRow({
-    required this.icon,
-    required this.child,
-    this.iconColor,
-    this.onTap,
-    this.semanticsLabel,
+  const _PriceVsUsual({required this.delta});
+
+  @override
+  Widget build(BuildContext context) {
+    final same = delta.abs() < _samePriceThreshold;
+    final cheaper = delta < 0;
+    final color = same
+        ? AppColors.textMuted
+        : cheaper
+        ? AppColors.good
+        : AppColors.bad;
+    final tint = same
+        ? AppColors.surfaceMuted
+        : cheaper
+        ? AppColors.goTint
+        : const Color(0xFFFEF3C7);
+    final label = same
+        ? 'Your usual price'
+        : '₱${delta.abs().toStringAsFixed(2)} '
+              '${cheaper ? 'below' : 'above'} usual';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!same)
+            Icon(
+              cheaper ? Icons.arrow_downward : Icons.arrow_upward,
+              size: 14,
+              color: color,
+            ),
+          const SizedBox(width: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+              fontFeatures: _tabular,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Distance, efficiency and cost per km for the tank before this fill-up.
+class _StatTiles extends StatelessWidget {
+  final FillUpLogEntry entry;
+
+  const _StatTiles({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    final km = entry.kmSincePrevious;
+    final odometer = Text(
+      'Odometer ${formatKm(entry.fillUp.odometerKm)}',
+      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+    );
+    if (km == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.insights, size: 20, color: AppColors.distance),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Your next fill-up unlocks distance, fuel efficiency '
+                    'and cost per km for this tank.',
+                    style: TextStyle(fontSize: 13, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          odometer,
+        ],
+      );
+    }
+
+    final kmPerLiter = entry.kmPerLiter;
+    final costPerKm = entry.costPerKm;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _StatTile(
+                label: 'Driven',
+                value: formatKmDelta(km),
+                color: AppColors.distance,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StatTile(
+                label: 'Efficiency',
+                value: kmPerLiter == null
+                    ? '—'
+                    : '${kmPerLiter.toStringAsFixed(2)} km/L',
+                trend: kmPerLiter == null
+                    ? null
+                    : entry.isAboveAverage
+                    ? _Trend.better
+                    : _Trend.worse,
+                note: kmPerLiter == null ? 'Add liters' : null,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StatTile(
+                label: 'Cost',
+                value: costPerKm == null ? '—' : formatCostPerKm(costPerKm),
+                trend: costPerKm == null
+                    ? null
+                    : entry.isCheaperPerKm
+                    ? _Trend.better
+                    : _Trend.worse,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        odometer,
+      ],
+    );
+  }
+}
+
+enum _Trend { better, worse }
+
+class _StatTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? color;
+  final _Trend? trend;
+  final String? note;
+
+  const _StatTile({
+    required this.label,
+    required this.value,
+    this.color,
+    this.trend,
+    this.note,
   });
 
   @override
   Widget build(BuildContext context) {
-    final row = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 40),
-      child: Row(
+    final valueColor =
+        color ??
+        switch (trend) {
+          _Trend.better => AppColors.good,
+          _Trend.worse => AppColors.bad,
+          null => AppColors.text,
+        };
+    final caption =
+        note ??
+        switch (trend) {
+          _Trend.better => 'Better than avg',
+          _Trend.worse => 'Worse than avg',
+          null => null,
+        };
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 48,
-            child: Icon(
-              icon,
-              size: 20,
-              color: iconColor ?? AppColors.textMuted,
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: valueColor,
+                fontFeatures: _tabular,
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(child: child),
-          if (onTap != null)
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: AppColors.textMuted,
-              ),
+          if (caption != null)
+            Row(
+              children: [
+                if (trend != null)
+                  Icon(
+                    trend == _Trend.better
+                        ? Icons.arrow_upward
+                        : Icons.arrow_downward,
+                    size: 12,
+                    color: valueColor,
+                  ),
+                Flexible(
+                  child: Text(
+                    caption,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: trend == null ? AppColors.textMuted : valueColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
         ],
       ),
     );
-    final labelled = semanticsLabel == null
-        ? row
-        : Semantics(
-            label: semanticsLabel,
-            button: onTap != null,
-            excludeSemantics: true,
-            child: row,
-          );
-    if (onTap == null) return labelled;
-    return AppTappable(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: labelled,
+  }
+}
+
+/// Notes and photos, when the user added them.
+class _Extras extends StatelessWidget {
+  final FillUpLogEntry entry;
+
+  const _Extras({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = entry.fillUp;
+    final photos = fill.photoPaths;
+    if (fill.notes.isEmpty && photos.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (fill.notes.isNotEmpty)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.sticky_note_2_outlined,
+                  size: 18,
+                  color: AppColors.textMuted,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    fill.notes,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          if (photos.isNotEmpty)
+            TextButton.icon(
+              onPressed: () => showFillUpPhotos(context, photos),
+              icon: const Icon(Icons.photo_library_outlined, size: 18),
+              label: Text(
+                photos.length == 1 ? '1 photo' : '${photos.length} photos',
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.ink,
+                padding: EdgeInsets.zero,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

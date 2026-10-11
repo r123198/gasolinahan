@@ -23,6 +23,24 @@ abstract final class AppColors {
   static const warning = Color(0xFFB45309); // 5.0:1
   static const error = Color(0xFFB91C1C); // 6.5:1
   static const accent = Color(0xFF6D28D9); // 7.1:1 — OCR / offline accents
+
+  // Number roles: one colour per kind of figure so a glance tells you what
+  // a number is. Good/bad always ship with an arrow or words, never alone.
+  static const distance = Color(0xFF4338CA); // 7.9:1, the logo's indigo
+  static const fuel = Color(0xFF0E7490); // 5.4:1, liters
+  static const good = goStrong; // cheaper, more km per liter
+  static const bad = warning; // pricier, fewer km per liter
+
+  // Same roles on the dark summary card (all ≥ 7:1 on [ink]).
+  static const onDarkMuted = Color(0xFFA1A9B8);
+  static const onDarkGood = Color(0xFF4ADE80);
+  static const onDarkDistance = Color(0xFFA5B4FC);
+  static const onDarkFuel = Color(0xFF67E8F9);
+
+  // PH pump colours for fuel grades.
+  static const fuelRegular = Color(0xFF1D4ED8);
+  static const fuelPremium = Color(0xFFB91C1C);
+  static const fuelDiesel = Color(0xFF15803D);
 }
 
 class AppTheme {

@@ -41,6 +41,13 @@ class _ReportViewState extends State<ReportView>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Respect the system "reduce motion" setting: hold the pulse still.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pulseController.stop();
+      _pulseController.value = 1;
+    } else if (!_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+    }
     if (!_launched) {
       _launched = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -149,51 +156,47 @@ class _ReportViewState extends State<ReportView>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF18181B),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   AppCircleButton(
-                    icon: Icons.arrow_back_ios_new,
+                    icon: Icons.arrow_back,
                     tooltip: 'Back',
                     onPressed: () {
                       context.read<ReportViewModel>().reset();
                       Navigator.pop(context);
                     },
-                    backgroundColor: Colors.white.withValues(alpha: 0.10),
-                    iconColor: Colors.white,
                   ),
-                  const Text(
-                    'REPORT',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                      color: Colors.white,
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        'Report prices',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
                   ),
                   AppCircleButton(
                     icon: Icons.help_outline,
                     tooltip: 'How reporting works',
-                    onPressed: () async {
-                      await _showOnboarding();
-                    },
-                    backgroundColor: Colors.white.withValues(alpha: 0.10),
-                    iconColor: Colors.white,
+                    onPressed: _showOnboarding,
                   ),
                 ],
               ),
             ),
             Expanded(
               child: Consumer<ReportViewModel>(
-                builder: (context, vm, _) {
-                  return _buildProcessingUI(vm);
-                },
+                builder: (context, vm, _) => _ProcessingSteps(
+                  step: vm.step,
+                  errorMessage: vm.errorMessage,
+                  pulse: _pulseController,
+                ),
               ),
             ),
           ],
@@ -201,113 +204,172 @@ class _ReportViewState extends State<ReportView>
       ),
     );
   }
+}
 
-  Widget _buildProcessingUI(ReportViewModel vm) {
-    final IconData icon;
-    final String title;
-    final String subtitle;
+/// The scan → read → locate progress, shown while the photo is processed.
+class _ProcessingSteps extends StatelessWidget {
+  final ReportStep step;
+  final String? errorMessage;
+  final Animation<double> pulse;
 
-    switch (vm.step) {
-      case ReportStep.idle:
-      case ReportStep.capturing:
-        icon = Icons.camera_alt_rounded;
-        title = 'Opening Camera';
-        subtitle = 'Point at the station price board';
-      case ReportStep.processing:
-        icon = Icons.document_scanner_rounded;
-        title = 'Reading Prices';
-        subtitle = 'Analyzing the image with OCR...';
-      case ReportStep.locating:
-        icon = Icons.location_searching_rounded;
-        title = 'Getting Location';
-        subtitle = 'Finding your current position...';
-      case ReportStep.form:
-      case ReportStep.submitting:
-        icon = Icons.check_circle_rounded;
-        title = 'Almost Done';
-        subtitle = 'Preparing your report...';
-    }
+  const _ProcessingSteps({
+    required this.step,
+    required this.errorMessage,
+    required this.pulse,
+  });
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+  static const _steps = [
+    (Icons.photo_camera_outlined, 'Take a photo of the price board'),
+    (Icons.document_scanner_outlined, 'Read the prices'),
+    (Icons.location_on_outlined, 'Find the station you\'re at'),
+  ];
+
+  int get _current => switch (step) {
+    ReportStep.idle || ReportStep.capturing => 0,
+    ReportStep.processing => 1,
+    ReportStep.locating => 2,
+    ReportStep.form || ReportStep.submitting => 3,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _current;
+    final (icon, _) = _steps[current.clamp(0, _steps.length - 1)];
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
       children: [
-        AnimatedBuilder(
-          animation: _pulseController,
-          builder: (context, child) {
-            final scale = 1.0 + _pulseController.value * 0.15;
-            final opacity = 0.4 + _pulseController.value * 0.6;
-            return Transform.scale(
-              scale: scale,
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.accent.withValues(alpha: opacity * 0.15),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.accent.withValues(alpha: opacity * 0.30),
-                    ),
-                    child: Icon(
-                      icon,
-                      size: 36,
-                      color: Colors.white.withValues(alpha: opacity),
-                    ),
-                  ),
-                ),
+        Center(
+          child: AnimatedBuilder(
+            animation: pulse,
+            builder: (context, child) =>
+                Transform.scale(scale: 1 + pulse.value * 0.08, child: child),
+            child: Container(
+              width: 112,
+              height: 112,
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                shape: BoxShape.circle,
               ),
-            );
-          },
+              child: Icon(icon, size: 48, color: AppColors.distance),
+            ),
+          ),
         ),
-        const SizedBox(height: 40),
+        const SizedBox(height: 24),
         Text(
-          title,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-            letterSpacing: -0.5,
+          current >= _steps.length ? 'Almost done' : 'Working on your report',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'This takes a few seconds. Keep the app open.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 28),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            children: [
+              for (final (i, (stepIcon, label)) in _steps.indexed)
+                _StepRow(
+                  icon: stepIcon,
+                  label: label,
+                  state: i < current
+                      ? _StepState.done
+                      : i == current
+                      ? _StepState.active
+                      : _StepState.waiting,
+                ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          subtitle,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Colors.white.withValues(alpha: 0.50),
-          ),
-        ),
-        const SizedBox(height: 32),
-        SizedBox(
-          width: 200,
-          child: LinearProgressIndicator(
-            borderRadius: BorderRadius.circular(4),
-            backgroundColor: Colors.white.withValues(alpha: 0.10),
-            valueColor: const AlwaysStoppedAnimation(AppColors.accent),
-          ),
-        ),
-        if (vm.errorMessage != null) ...[
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+        if (errorMessage != null) ...[
+          const SizedBox(height: 16),
+          Semantics(
+            liveRegion: true,
             child: Text(
-              vm.errorMessage!,
+              errorMessage!,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Color(0xFFFF6B6B),
-                fontSize: 13,
+                color: AppColors.error,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ],
       ],
+    );
+  }
+}
+
+enum _StepState { done, active, waiting }
+
+class _StepRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final _StepState state;
+
+  const _StepRow({
+    required this.icon,
+    required this.label,
+    required this.state,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final status = switch (state) {
+      _StepState.done => 'done',
+      _StepState.active => 'in progress',
+      _StepState.waiting => 'waiting',
+    };
+    return Semantics(
+      label: '$label, $status',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 28,
+              child: switch (state) {
+                _StepState.done => const Icon(
+                  Icons.check_circle,
+                  color: AppColors.good,
+                ),
+                _StepState.active => const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppColors.distance,
+                  ),
+                ),
+                _StepState.waiting => Icon(icon, color: AppColors.textMuted),
+              },
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: state == _StepState.active
+                      ? FontWeight.w700
+                      : FontWeight.w500,
+                  color: state == _StepState.waiting
+                      ? AppColors.textMuted
+                      : AppColors.text,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

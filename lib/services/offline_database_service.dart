@@ -6,6 +6,10 @@ const _fillUpDetailColumns = {
   'pricePerLiter': 'REAL',
   'notes': "TEXT NOT NULL DEFAULT ''",
   'photoPaths': "TEXT NOT NULL DEFAULT '[]'",
+  // Cloud sync (users/{uid}/fill_ups) and per-account scoping.
+  'remoteId': 'TEXT',
+  'updatedAt': 'TEXT',
+  'ownerUid': 'TEXT',
 };
 
 /// ALTER statements that bring a fill_ups table with [existingColumns] up to
@@ -51,7 +55,7 @@ class OfflineDatabaseService {
     final path = p.join(dbPath, 'gasolinahan.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await _createPendingReports(db);
@@ -66,7 +70,7 @@ class OfflineDatabaseService {
             'ALTER TABLE trips ADD COLUMN isActive INTEGER NOT NULL DEFAULT 0',
           );
         }
-        if (oldVersion < 5) await _ensureFillUpColumns(db);
+        if (oldVersion < 6) await _ensureFillUpColumns(db);
       },
     );
   }
@@ -130,7 +134,10 @@ class OfflineDatabaseService {
             timestamp TEXT NOT NULL,
             pricePerLiter REAL,
             notes TEXT NOT NULL DEFAULT '',
-            photoPaths TEXT NOT NULL DEFAULT '[]'
+            photoPaths TEXT NOT NULL DEFAULT '[]',
+            remoteId TEXT,
+            updatedAt TEXT,
+            ownerUid TEXT
           )
         ''');
   }

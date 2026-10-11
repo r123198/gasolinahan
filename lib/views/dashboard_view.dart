@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
@@ -14,18 +15,18 @@ import '../viewmodels/fill_up_nudge_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
 import 'fill_up_form_sheet.dart';
-import '../components/detour_card.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_platform.dart';
-import '../ui/adaptive/app_sheet.dart';
 import '../ui/adaptive/app_toast.dart';
 import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
-import '../components/app_primary_button.dart';
+import '../ui/map_style.dart';
 import '../components/brand_logo.dart';
 import '../components/map_bottom_controls.dart';
 import '../services/heading_stream.dart';
+import '../models/map_framing.dart';
 import 'nearby_stations_sheet.dart';
+import 'station_detail_sheet.dart';
 import 'home_view.dart';
 import 'profile_view.dart';
 
@@ -48,6 +49,7 @@ const List<_NavTab> _tabs = [
 
 /// Zoom used when centering on the user.
 const _followZoom = 16.0;
+const _locationTimeout = Duration(seconds: 8);
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -65,6 +67,8 @@ class _DashboardViewState extends State<DashboardView> {
   /// While true the map keeps the user's dot centered as they move; any
   /// pan by the user turns it off.
   bool _followUser = false;
+  bool _didFrameStations = false;
+  bool _locationResolved = false;
 
   /// Created once: the layer resubscribes whenever it gets a new stream.
   final Stream<LocationMarkerHeading?> _headingStream =
@@ -92,6 +96,8 @@ class _DashboardViewState extends State<DashboardView> {
     _searchController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DashboardViewModel>().listenToStations();
+      // Signed in by now: pull this account's fill-ups from the cloud.
+      _fillUpsVm.load();
       _startTripsAndNudges();
       _initLocation();
     });
@@ -125,8 +131,41 @@ class _DashboardViewState extends State<DashboardView> {
     _openNudgedFillUp(); // the app may have been opened from a nudge
   }
 
-  void _syncNudgeStations() =>
-      _nudgesVm.updateStations(_stationsVm.nearbyStations);
+  void _syncNudgeStations() {
+    _nudgesVm.updateStations(_stationsVm.nearbyStations);
+    _frameStationsOnce();
+  }
+
+  /// On first open, fit the reported stations in view (see [pointsToFrame])
+  /// once stations have loaded and the location lookup has finished.
+  void _frameStationsOnce() {
+    if (_didFrameStations || !_locationResolved || _stationsVm.isLoading) {
+      return;
+    }
+    final points = pointsToFrame(
+      _stationsVm.visibleStations,
+      userLat: _userLat,
+      userLng: _userLng,
+    );
+    if (points.isEmpty) return;
+    _didFrameStations = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final coords = [for (final (lat, lng) in points) LatLng(lat, lng)];
+      if (coords.length == 1) {
+        _mapController.move(coords.single, 15);
+        return;
+      }
+      _mapController.fitCamera(
+        CameraFit.coordinates(
+          coordinates: coords,
+          // Clear the search row on top and the controls at the bottom.
+          padding: const EdgeInsets.fromLTRB(48, 160, 48, 300),
+          maxZoom: 15,
+        ),
+      );
+    });
+  }
 
   void _syncNudgeFillUps() {
     _nudgesVm.updateFillUps(_fillUpsVm.fillUps);
@@ -142,6 +181,15 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   Future<void> _initLocation() async {
+    try {
+      await _lookUpInitialLocation();
+    } finally {
+      _locationResolved = true;
+      _frameStationsOnce();
+    }
+  }
+
+  Future<void> _lookUpInitialLocation() async {
     bool serviceEnabled = await _location.serviceEnabled();
     if (!serviceEnabled) {
       serviceEnabled = await _location.requestService();
@@ -158,7 +206,7 @@ class _DashboardViewState extends State<DashboardView> {
     }
 
     try {
-      final loc = await _location.getLocation();
+      final loc = await _location.getLocation().timeout(_locationTimeout);
       if (loc.latitude != null && loc.longitude != null && mounted) {
         setState(() {
           _userLat = loc.latitude;
@@ -166,22 +214,38 @@ class _DashboardViewState extends State<DashboardView> {
         });
         _mapController.move(LatLng(loc.latitude!, loc.longitude!), 14.0);
       }
-    } catch (_) {}
+    } on TimeoutException {
+      debugPrint('Initial location lookup timed out');
+    } on PlatformException catch (e) {
+      debugPrint('Initial location lookup failed: ${e.code}');
+    }
   }
 
+  /// Re-centres on the user. The location dot's own fix answers at once;
+  /// the plugin lookup (which can wait forever without a GPS fix) is capped.
   Future<void> _goToMyLocation() async {
+    _alignToUser.add(15);
     try {
-      final loc = await _location.getLocation();
-      if (loc.latitude != null && loc.longitude != null) {
-        setState(() {
-          _userLat = loc.latitude;
-          _userLng = loc.longitude;
-        });
-        _mapController.move(LatLng(loc.latitude!, loc.longitude!), 15.0);
-      }
-    } catch (_) {
+      final loc = await _location.getLocation().timeout(_locationTimeout);
+      final lat = loc.latitude;
+      final lng = loc.longitude;
+      if (lat == null || lng == null || !mounted) return;
+      setState(() {
+        _userLat = lat;
+        _userLng = lng;
+      });
+      _mapController.move(LatLng(lat, lng), 15.0);
+    } on TimeoutException {
       if (mounted) {
-        showAppToast(context, 'Could not get current location');
+        showAppToast(
+          context,
+          "Can't find your location yet. Check that location is on.",
+        );
+      }
+    } on PlatformException catch (e) {
+      debugPrint('Location lookup failed: ${e.code}');
+      if (mounted) {
+        showAppToast(context, 'Allow location access to see where you are.');
       }
     }
   }
@@ -193,213 +257,13 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   void _showStationDetail(StationModel station) {
-    final scheme = Theme.of(context).colorScheme;
-    final accent = brandAccent(station.brand);
-
-    // Move map to station
     _mapController.move(LatLng(station.latitude, station.longitude), 16.0);
-
-    showAppSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return Container(
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1A000000),
-                blurRadius: 40,
-                offset: Offset(0, -8),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle
-              Container(
-                width: 40,
-                height: 5,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              // Header
-              Row(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: accent.withValues(alpha: 0.20)),
-                    ),
-                    child: brandLogoWidget(station.brand, 36),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          station.name,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          station.address.isNotEmpty
-                              ? station.address
-                              : station.brand,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (station.brand.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        station.brand,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: accent,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // Prices
-              Row(
-                children: [
-                  _buildPriceCard(
-                    'Regular',
-                    station.regularPrice,
-                    const Color(0xFF2563EB),
-                    scheme,
-                  ),
-                  const SizedBox(width: 8),
-                  _buildPriceCard(
-                    'Premium',
-                    station.premiumPrice,
-                    const Color(0xFFDC2626),
-                    scheme,
-                  ),
-                  const SizedBox(width: 8),
-                  _buildPriceCard(
-                    'Diesel',
-                    station.dieselPrice,
-                    AppColors.goStrong,
-                    scheme,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Updated time
-              Row(
-                children: [
-                  const Icon(
-                    Icons.schedule,
-                    size: 14,
-                    color: AppColors.textMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Updated ${formatRelativeTime(station.lastUpdated)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (_userLat != null && _userLng != null)
-                DetourCard(
-                  station: station,
-                  userLat: _userLat!,
-                  userLng: _userLng!,
-                ),
-              // Actions
-              AppPrimaryButton(
-                label: 'Update Prices',
-                trailingIcon: Icons.add_a_photo_outlined,
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.pushNamed(context, '/report');
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildPriceCard(
-    String label,
-    double price,
-    Color color,
-    ColorScheme scheme,
-  ) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withValues(alpha: 0.10)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: color.withValues(alpha: 0.70),
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              price > 0 ? formatPhp(price) : '\u2014',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: price > 0 ? color : AppColors.textMuted,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ],
-        ),
-      ),
+    showStationDetailSheet(
+      context,
+      station: station,
+      userLat: _userLat,
+      userLng: _userLng,
+      onReport: () => Navigator.pushNamed(context, '/report'),
     );
   }
 
@@ -569,7 +433,8 @@ class _DashboardViewState extends State<DashboardView> {
   Widget _buildMap() {
     return Consumer<DashboardViewModel>(
       builder: (context, vm, _) {
-        final stations = vm.nearbyStations;
+        // Markers follow the "With prices" filter, like the list does.
+        final stations = vm.visibleStations;
         final cheapestId = _cheapestNearbyId(stations, vm.fuelType);
         final markers = stations.map((s) {
           final price = switch (vm.fuelType) {
@@ -577,98 +442,105 @@ class _DashboardViewState extends State<DashboardView> {
             FuelType.premium => s.premiumPrice,
             FuelType.diesel => s.dieselPrice,
           };
-          final accent = brandAccent(s.brand);
           final isCheapest = s.id == cheapestId;
-          final markerColor = isCheapest ? AppColors.goStrong : Colors.white;
-          final borderColor = isCheapest
-              ? AppColors.goStrong
-              : accent.withValues(alpha: 0.25);
-          final textColor = isCheapest ? Colors.white : const Color(0xFF18181B);
+          // Black and white: white pills, the cheapest one inverted.
+          final markerColor = isCheapest ? AppColors.ink : Colors.white;
+          final borderColor = isCheapest ? AppColors.ink : AppColors.divider;
+          final textColor = isCheapest ? Colors.white : AppColors.ink;
           return Marker(
             point: LatLng(s.latitude, s.longitude),
-            width: 160,
-            height: isCheapest ? 78 : 60,
-            child: GestureDetector(
+            width: 170,
+            height: isCheapest ? 86 : 68,
+            // The box sits above the point, so the pointer's tip marks it.
+            alignment: Alignment.topCenter,
+            child: Semantics(
+              button: true,
+              label:
+                  '${s.displayName}, ${formatPricePerLiter(price)}'
+                  '${isCheapest ? ', cheapest nearby' : ''}',
+              excludeSemantics: true,
               onTap: () => _showStationDetail(s),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isCheapest)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.goStrong,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'CHEAPEST',
-                        style: TextStyle(
+              child: GestureDetector(
+                onTap: () => _showStationDetail(s),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (isCheapest)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
                           color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppColors.ink),
                         ),
-                      ),
-                    ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: markerColor,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: borderColor,
-                        width: isCheapest ? 2 : 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isCheapest
-                              ? const Color(0x3316A34A)
-                              : const Color(0x22000000),
-                          blurRadius: isCheapest ? 16 : 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isCheapest ? Colors.white : accent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          formatPricePerLiter(price),
+                        child: const Text(
+                          'Cheapest',
                           style: TextStyle(
-                            color: textColor,
-                            fontSize: 13,
+                            color: AppColors.ink,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            letterSpacing: -0.3,
                           ),
                         ),
-                      ],
+                      ),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+                      decoration: BoxDecoration(
+                        color: markerColor,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: borderColor),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x29000000),
+                            blurRadius: 12,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 24,
+                            height: 24,
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: brandLogoWidget(
+                              s.brand,
+                              18,
+                              stationName: s.name,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            formatPricePerLiter(price),
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  // Triangle pointer
-                  CustomPaint(
-                    size: const Size(14, 8),
-                    painter: _TrianglePainter(
-                      color: markerColor,
-                      borderColor: borderColor,
+                    // Triangle pointer
+                    CustomPaint(
+                      size: const Size(14, 8),
+                      painter: _TrianglePainter(
+                        color: markerColor,
+                        borderColor: borderColor,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -701,7 +573,8 @@ class _DashboardViewState extends State<DashboardView> {
             // Official OpenStreetMap tiles: free, no API key.
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.gasolinahan.app',
+              userAgentPackageName: 'com.maalam.gasolinahan',
+              tileBuilder: monochromeTileBuilder,
             ),
             // OSM credit is shown under the map controls instead of the
             // corner widget, which the floating nav bar would cover.
@@ -735,7 +608,7 @@ class _DashboardViewState extends State<DashboardView> {
                           LatLng(p.latitude, p.longitude),
                       ],
                       strokeWidth: 5,
-                      color: const Color(0xFFDC2626),
+                      color: AppColors.ink,
                     ),
                 ],
               ),

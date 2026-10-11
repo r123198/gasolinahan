@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../models/brand_registry.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_tappable.dart';
 import '../ui/app_theme.dart';
@@ -78,7 +79,7 @@ class StationChips extends StatelessWidget {
   final StationChoice? selected;
   final bool isOther;
   final ValueChanged<StationChoice> onSelected;
-  final VoidCallback onOther;
+  final VoidCallback? onOther;
   final VoidCallback? onMore;
 
   const StationChips({
@@ -87,7 +88,7 @@ class StationChips extends StatelessWidget {
     required this.selected,
     required this.isOther,
     required this.onSelected,
-    required this.onOther,
+    this.onOther,
     this.onMore,
   });
 
@@ -103,12 +104,13 @@ class StationChips extends StatelessWidget {
             selected: !isOther && c == selected,
             onSelected: (_) => onSelected(c),
           ),
-        ChoiceChip(
-          avatar: const Icon(Icons.edit_outlined, size: 16),
-          label: const Text('Other'),
-          selected: isOther,
-          onSelected: (_) => onOther(),
-        ),
+        if (onOther != null)
+          ChoiceChip(
+            avatar: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('Other'),
+            selected: isOther,
+            onSelected: (_) => onOther!(),
+          ),
         if (onMore != null)
           ActionChip(
             avatar: const Icon(Icons.expand_more, size: 18),
@@ -178,6 +180,7 @@ class PhotoStrip extends StatelessWidget {
           Semantics(
             button: true,
             label: 'Add photo',
+            onTap: onAdd,
             excludeSemantics: true,
             child: AppTappable(
               onTap: onAdd,
@@ -210,6 +213,118 @@ class PhotoStrip extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Scrollable row of PH fuel brands as round logo buttons, with "Other"
+/// at the end for independent stations.
+class BrandChips extends StatelessWidget {
+  final List<BrandInfo> brands;
+  final BrandInfo? selected;
+  final bool isOtherSelected;
+  final ValueChanged<BrandInfo> onSelected;
+  final VoidCallback onOther;
+
+  const BrandChips({
+    super.key,
+    required this.brands,
+    required this.selected,
+    required this.isOtherSelected,
+    required this.onSelected,
+    required this.onOther,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 92,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        // Let the row bleed to the sheet edges while lining up with fields.
+        clipBehavior: Clip.none,
+        children: [
+          for (final b in brands)
+            _BrandChip(
+              label: b.name,
+              isSelected: b.name == selected?.name,
+              onTap: () => onSelected(b),
+              child: b.mark(size: 34),
+            ),
+          _BrandChip(
+            label: 'Other',
+            isSelected: isOtherSelected,
+            onTap: onOther,
+            child: const Icon(Icons.edit_outlined, color: AppColors.ink),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BrandChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _BrandChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: label,
+      // excludeSemantics hides the InkWell's action, so declare it here.
+      onTap: onTap,
+      excludeSemantics: true,
+      child: AppTappable(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          width: 68,
+          child: Column(
+            children: [
+              const SizedBox(height: 4),
+              AnimatedContainer(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 150),
+                width: 56,
+                height: 56,
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? AppColors.ink : AppColors.divider,
+                    width: isSelected ? 2.5 : 1,
+                  ),
+                ),
+                child: Center(child: child),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? AppColors.ink : AppColors.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

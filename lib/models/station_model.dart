@@ -25,6 +25,19 @@ class StationModel {
     required this.lastUpdated,
   });
 
+  /// Name to show: the saved name, else "Shell station" (brand + station),
+  /// else the address.
+  /// Stations reported without a name come back as "Unknown Station".
+  String get displayName {
+    final n = name.trim();
+    if (n.isNotEmpty && n != unknownName) return n;
+    if (brand.trim().isNotEmpty) return '${brand.trim()} station';
+    if (address.trim().isNotEmpty) return address.trim();
+    return 'Gas station';
+  }
+
+  static const unknownName = 'Unknown Station';
+
   factory StationModel.fromMap(Map<String, dynamic> data, String id) {
     return StationModel(
       id: id,

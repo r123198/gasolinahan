@@ -10,6 +10,7 @@ import 'viewmodels/fill_up_viewmodel.dart';
 import 'viewmodels/report_viewmodel.dart';
 import 'viewmodels/trip_viewmodel.dart';
 import 'views/splash_view.dart';
+import 'views/welcome_view.dart';
 import 'views/sign_in_view.dart';
 import 'views/sign_up_view.dart';
 import 'views/dashboard_view.dart';
@@ -47,6 +48,11 @@ class MyApp extends StatelessWidget {
         initialRoute: '/',
         routes: {
           '/': (context) => const SplashView(),
+          '/welcome': (context) => WelcomeView(
+            nextRoute:
+                ModalRoute.of(context)?.settings.arguments as String? ??
+                '/login',
+          ),
           '/login': (context) => const SignInView(),
           '/register': (context) => const SignUpView(),
           '/dashboard': (context) => const DashboardView(),

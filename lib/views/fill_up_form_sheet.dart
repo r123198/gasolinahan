@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../components/app_primary_button.dart';
+import '../models/brand_registry.dart';
 import '../models/fill_up_model.dart';
 import '../models/fill_up_validator.dart';
+import '../models/station_naming.dart';
 import '../models/station_model.dart';
 import '../models/station_summary.dart';
 import '../services/fill_up_photo_store.dart';
@@ -22,7 +24,6 @@ import '../viewmodels/dashboard_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import 'fill_up_form_parts.dart';
 
-const _otherChoice = StationChoice('', 'Other', '');
 const _maxStationChips = 5;
 const _photoMaxWidth = 1600.0;
 const _fuelLabels = {
@@ -77,7 +78,13 @@ class _FillUpFormState extends State<_FillUpForm> {
   final _picker = ImagePicker();
 
   late final List<StationChoice> _choices;
+
+  /// The station is set one of three ways: a recent/nearby [_station], a
+  /// brand logo ([_brand], with [_nameCtrl] as the branch), or "Other"
+  /// ([_typedOther], with [_nameCtrl] as the full name).
   StationChoice? _station;
+  BrandInfo? _brand;
+  bool _typedOther = false;
   FuelType _fuel = FuelType.regular;
   late DateTime _date;
   List<String> _photos = [];
@@ -93,7 +100,16 @@ class _FillUpFormState extends State<_FillUpForm> {
   FillUpErrors _errors = const FillUpErrors();
 
   bool get _isEditing => widget.editing != null;
-  bool get _isOther => _station == _otherChoice;
+  bool get _isOther => _typedOther;
+
+  /// Brand logo to highlight: the picked brand, or the picked station's.
+  BrandInfo? get _highlightedBrand {
+    final station = _station;
+    if (station != null) {
+      return BrandRegistry.match(station.brand, stationName: station.name);
+    }
+    return _brand;
+  }
 
   @override
   void initState() {
@@ -102,11 +118,21 @@ class _FillUpFormState extends State<_FillUpForm> {
     _choices = _buildChoices();
     final editing = widget.editing;
     if (editing != null) {
-      _station = _choices.firstWhere(
-        (c) => c.id == editing.stationId && c.name == editing.stationName,
-        orElse: () => _otherChoice,
-      );
-      if (_isOther) _nameCtrl.text = editing.stationName;
+      _station = _choices
+          .where(
+            (c) => c.id == editing.stationId && c.name == editing.stationName,
+          )
+          .firstOrNull;
+      if (_station == null) {
+        _brand = BrandRegistry.match(
+          editing.brand,
+          stationName: editing.stationName,
+        );
+        _typedOther = _brand == null;
+        _nameCtrl.text = _brand == null
+            ? editing.stationName
+            : branchOf(editing.stationName, _brand!);
+      }
       _fuel = FuelType.values.asNameMap()[editing.fuelType] ?? FuelType.regular;
       _date = editing.timestamp;
       _amountCtrl.text = editing.amountSpent.toStringAsFixed(2);
@@ -168,7 +194,11 @@ class _FillUpFormState extends State<_FillUpForm> {
         if (seen.add(StationChoice(s.stationId, s.stationName, s.brand)))
           StationChoice(s.stationId, s.stationName, s.brand),
       for (final s in nearby)
-        if (seen.add(StationChoice(s.id, s.name, s.brand)))
+        // Stations saved without a name come back as "Unknown Station";
+        // the brand logos below are the better way to pick those.
+        if (s.name.trim().isNotEmpty &&
+            s.name != 'Unknown Station' &&
+            seen.add(StationChoice(s.id, s.name, s.brand)))
           StationChoice(s.id, s.name, s.brand),
     ];
   }
@@ -188,7 +218,9 @@ class _FillUpFormState extends State<_FillUpForm> {
   void _prefillPrice() {
     if (_priceEditedByUser) return;
     final station = _station;
+    final brand = _brand;
     double? price;
+    if (brand != null) price = _nearbyPriceForBrand(brand);
     if (station != null && station.id.isNotEmpty) {
       final reported = context
           .read<DashboardViewModel>()
@@ -214,14 +246,47 @@ class _FillUpFormState extends State<_FillUpForm> {
     }
   }
 
-  void _selectStation(StationChoice choice) {
+  /// A nearby station of [brand] that has a reported price for this fuel.
+  double? _nearbyPriceForBrand(BrandInfo brand) {
+    for (final s in context.read<DashboardViewModel>().nearbyStations) {
+      final match = BrandRegistry.match(s.brand, stationName: s.name);
+      if (match?.name != brand.name) continue;
+      final price = switch (_fuel) {
+        FuelType.regular => s.regularPrice,
+        FuelType.premium => s.premiumPrice,
+        FuelType.diesel => s.dieselPrice,
+      };
+      if (price > 0) return price;
+    }
+    return null;
+  }
+
+  void _changeStation(VoidCallback change) {
     setState(() {
-      _station = choice;
+      change();
       _isDirty = true;
       _prefillPrice();
       if (_submitted) _errors = _validate();
     });
   }
+
+  void _selectStation(StationChoice choice) => _changeStation(() {
+    _station = choice;
+    _brand = null;
+    _typedOther = false;
+  });
+
+  void _selectBrand(BrandInfo brand) => _changeStation(() {
+    _station = null;
+    _brand = brand;
+    _typedOther = false;
+  });
+
+  void _selectOther() => _changeStation(() {
+    _station = null;
+    _brand = null;
+    _typedOther = true;
+  });
 
   Future<void> _pickFromAllStations() async {
     final picked = await showAppPicker<StationChoice>(
@@ -343,7 +408,11 @@ class _FillUpFormState extends State<_FillUpForm> {
   }
 
   FillUpDraft get _draft => FillUpDraft(
-    stationName: _isOther ? _nameCtrl.text : _station?.name,
+    stationName: switch ((_station, _brand)) {
+      (final StationChoice s, _) => s.name,
+      (_, final BrandInfo b) => composeStationName(b, _nameCtrl.text),
+      _ => _typedOther ? _nameCtrl.text : null,
+    },
     amountText: _amountCtrl.text,
     pricePerLiterText: _priceCtrl.text,
     odometerText: _odometerCtrl.text,
@@ -371,16 +440,23 @@ class _FillUpFormState extends State<_FillUpForm> {
     if (!errors.isEmpty) return;
 
     final draft = _draft;
-    final station = _station!;
+    final station = _station;
     final vm = context.read<FillUpViewModel>();
     final navigator = Navigator.of(context);
     setState(() => _isSaving = true);
 
     final fillUp = FillUp(
       id: widget.editing?.id,
-      stationId: station.id,
+      stationId: station?.id ?? '',
       stationName: draft.stationName!.trim(),
-      brand: station.brand,
+      // A typed "Petron Mayapa" still gets Petron's logo and colours.
+      brand: switch (station?.brand) {
+        final String b when b.isNotEmpty => b,
+        _ =>
+          _brand?.name ??
+              BrandRegistry.inferFromName(draft.stationName!)?.name ??
+              '',
+      },
       fuelType: _fuel.name,
       amountSpent: draft.amount!,
       liters: draft.liters,
@@ -438,9 +514,10 @@ class _FillUpFormState extends State<_FillUpForm> {
     final lastOdometer = context.read<FillUpViewModel>().lastOdometer;
     final chips = _choices.take(_maxStationChips).toList();
     final selected = _station;
-    if (selected != null && !_isOther && !chips.contains(selected)) {
+    if (selected != null && !chips.contains(selected)) {
       chips.insert(0, selected);
     }
+    final brand = _brand;
 
     return PopScope(
       canPop: _isSaving || !_isDirty,
@@ -472,19 +549,42 @@ class _FillUpFormState extends State<_FillUpForm> {
             ),
             FieldError(_errors.date),
             const SizedBox(height: 16),
-            const FormLabel('Station'),
-            StationChips(
-              choices: chips,
-              selected: _station,
-              isOther: _isOther,
-              onSelected: _selectStation,
-              onOther: () => _selectStation(_otherChoice),
-              onMore: _choices.length > chips.length
-                  ? _pickFromAllStations
-                  : null,
+            if (chips.isNotEmpty) ...[
+              const FormLabel('Recent & nearby'),
+              StationChips(
+                choices: chips,
+                selected: _station,
+                isOther: false,
+                onSelected: _selectStation,
+                onMore: _choices.length > chips.length
+                    ? _pickFromAllStations
+                    : null,
+              ),
+              const SizedBox(height: 16),
+            ],
+            FormLabel(chips.isEmpty ? 'Station brand' : 'Or pick a brand'),
+            BrandChips(
+              brands: BrandRegistry.brands,
+              selected: _highlightedBrand,
+              isOtherSelected: _typedOther,
+              onSelected: _selectBrand,
+              onOther: _selectOther,
             ),
-            if (_isOther) ...[
-              const SizedBox(height: 12),
+            if (brand != null) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _nameCtrl,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: 'Branch or area (optional)',
+                  hintText: 'e.g. Mayapa',
+                  helperText:
+                      'Saved as "${composeStationName(brand, _nameCtrl.text)}"',
+                ),
+              ),
+            ] else if (_typedOther) ...[
+              const SizedBox(height: 8),
               TextField(
                 controller: _nameCtrl,
                 autofocus: !_isEditing,
@@ -492,7 +592,7 @@ class _FillUpFormState extends State<_FillUpForm> {
                 textInputAction: TextInputAction.next,
                 decoration: InputDecoration(
                   labelText: 'Station name',
-                  hintText: 'e.g. Petron Mayapa',
+                  hintText: 'e.g. Kuya Ben Gasoline',
                   errorText: _errors.station,
                 ),
               ),

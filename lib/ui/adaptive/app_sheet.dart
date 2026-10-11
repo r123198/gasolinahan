@@ -33,6 +33,14 @@ Future<T?> showAppSheet<T>({
     context: context,
     builder: (popupContext) {
       final media = MediaQuery.of(popupContext);
+      // A bottom sheet never reaches the status bar, so drop the top inset
+      // (as Material's sheet does); otherwise any SafeArea inside the sheet
+      // adds a status-bar-tall gap above the content.
+      final content = MediaQuery.removePadding(
+        context: popupContext,
+        removeTop: true,
+        child: Builder(builder: builder),
+      );
       return AnimatedPadding(
         duration: const Duration(milliseconds: 150),
         padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
@@ -52,9 +60,9 @@ Future<T?> showAppSheet<T>({
                           ? 0
                           : media.viewPadding.bottom,
                     ),
-                    child: builder(popupContext),
+                    child: content,
                   )
-                : builder(popupContext),
+                : content,
           ),
         ),
       );

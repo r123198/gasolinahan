@@ -1,180 +1,197 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../viewmodels/report_viewmodel.dart';
+import '../components/app_logo.dart';
 import '../components/app_primary_button.dart';
-import '../components/app_list_tile.dart';
+import '../components/brand_logo.dart';
 import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
+import '../viewmodels/report_viewmodel.dart';
 
 class SuccessView extends StatelessWidget {
   const SuccessView({super.key});
 
+  void _backToMap(BuildContext context) {
+    context.read<ReportViewModel>().reset();
+    Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (_) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = context.read<ReportViewModel>();
-    final price = vm.regularPrice > 0
-        ? vm.regularPrice
-        : (vm.premiumPrice > 0 ? vm.premiumPrice : vm.dieselPrice);
-    final fuelType = vm.regularPrice > 0
-        ? 'Regular'
-        : (vm.premiumPrice > 0 ? 'Premium' : 'Diesel');
-    final stationLabel = vm.stationName.isNotEmpty
-        ? vm.stationName
-        : 'Unknown Station';
-    final brandLabel = vm.brand.isNotEmpty ? vm.brand : '';
+    final station = vm.stationName.isNotEmpty ? vm.stationName : 'Station';
+    final prices = [
+      ('Regular', vm.regularPrice, AppColors.fuelRegular),
+      ('Premium', vm.premiumPrice, AppColors.fuelPremium),
+      ('Diesel', vm.dieselPrice, AppColors.fuelDiesel),
+    ].where((p) => p.$2 > 0).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 56),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.check_circle,
-                      size: 120,
-                      color: Colors.black,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+                children: [
+                  const Center(child: AppLogo(size: 72)),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    header: true,
+                    liveRegion: true,
+                    child: Text(
+                      vm.savedOffline ? 'Saved offline' : 'Report sent',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineMedium,
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      vm.savedOffline ? 'Saved Offline' : 'Report Received',
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -1,
-                      ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    vm.savedOffline
+                        ? "We'll send it as soon as you're back online."
+                        : 'Thanks! Drivers nearby can see these prices now.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: AppColors.textMuted,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      vm.savedOffline
-                          ? 'Will sync when you\'re back online.'
-                          : 'Thanks for helping update prices.',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: AppColors.textMuted,
-                      ),
+                  ),
+                  const SizedBox(height: 28),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    const SizedBox(height: 48),
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.grey.shade200),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x1A000000),
-                            blurRadius: 40,
-                            offset: Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Column(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppColors.divider),
+                              ),
+                              child: ExcludeSemantics(
+                                child: brandLogoWidget(
+                                  vm.brand,
+                                  30,
+                                  stationName: station,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'SCANNED PRICE',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
+                                    station,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    vm.savedOffline
+                                        ? 'Waiting to sync'
+                                        : 'Reported just now',
+                                    style: const TextStyle(
+                                      fontSize: 13,
                                       color: AppColors.textMuted,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.baseline,
-                                    textBaseline: TextBaseline.alphabetic,
-                                    children: [
-                                      Text(
-                                        formatPhp(price),
-                                        style: const TextStyle(
-                                          fontSize: 48,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: -2,
-                                        ),
-                                      ),
-                                      Text(
-                                        '/L',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.textMuted,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                                 ],
                               ),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.local_gas_station,
-                                  size: 24,
-                                  color: Colors.black,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            for (final (i, (label, price, color))
+                                in prices.indexed) ...[
+                              if (i > 0) const SizedBox(width: 8),
+                              Expanded(
+                                child: _PriceTile(
+                                  label: label,
+                                  price: price,
+                                  color: color,
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 24),
-                          AppDetailRow(
-                            icon: Icons.storefront,
-                            text: brandLabel.isNotEmpty
-                                ? '$stationLabel ($brandLabel)'
-                                : stationLabel,
-                          ),
-                          AppDetailRow(icon: Icons.category, text: fuelType),
-                          const AppDetailRow(
-                            icon: Icons.schedule,
-                            text: 'Just now',
-                          ),
-                          if (vm.savedOffline)
-                            const AppDetailRow(
-                              icon: Icons.cloud_off,
-                              text: 'Pending sync',
-                            ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               child: AppPrimaryButton(
-                label: 'Return to Map',
-                borderRadius: 32,
-                elevation: 8,
-                onPressed: () {
-                  // Reset the report viewmodel
-                  context.read<ReportViewModel>().reset();
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/dashboard',
-                    (route) => false,
-                  );
-                },
+                label: 'Back to map',
+                onPressed: () => _backToMap(context),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PriceTile extends StatelessWidget {
+  final String label;
+  final double price;
+  final Color color;
+
+  const _PriceTile({
+    required this.label,
+    required this.price,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${formatPhp(price)}/L',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

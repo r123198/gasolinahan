@@ -350,4 +350,39 @@ void main() {
       expect(sheetHeight, greaterThan(100));
     });
   });
+
+  testWidgets('iOS sheet content gets no status-bar inset at the top', (
+    tester,
+  ) async {
+    double? topInset;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.iOS),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            padding: const EdgeInsets.only(top: 59, bottom: 34),
+            viewPadding: const EdgeInsets.only(top: 59, bottom: 34),
+          ),
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showAppSheet<void>(
+                context: context,
+                builder: (sheetContext) {
+                  topInset = MediaQuery.paddingOf(sheetContext).top;
+                  return const SafeArea(child: Text('sheet'));
+                },
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(topInset, 0);
+  });
 }

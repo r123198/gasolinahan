@@ -4,14 +4,16 @@ import '../components/app_empty_state.dart';
 import '../components/app_logo.dart';
 import '../components/app_primary_button.dart';
 import '../components/insights_card.dart';
+import '../components/tracker_summary_card.dart';
 import '../components/fill_up_log_card.dart';
 import '../models/fill_up_model.dart';
 import '../models/station_summary.dart';
 import '../ui/adaptive/app_dialog.dart';
 import '../ui/adaptive/app_toast.dart';
 import '../ui/adaptive/app_spinner.dart';
-import '../ui/tracker_format.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
+import '../ui/adaptive/app_page_route.dart';
+import 'analytics_view.dart';
 import 'fill_up_form_sheet.dart';
 import 'station_history_sheet.dart';
 import '../ui/app_theme.dart';
@@ -146,7 +148,6 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totals = vm.totals;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       child: Column(
@@ -163,7 +164,7 @@ class _Header extends StatelessWidget {
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,
-                    color: Color(0xFF111827),
+                    color: AppColors.ink,
                   ),
                 ),
               ),
@@ -172,7 +173,7 @@ class _Header extends StatelessWidget {
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('Fill-up'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF111827),
+                  backgroundColor: AppColors.ink,
                   shape: const StadiumBorder(),
                 ),
               ),
@@ -187,63 +188,18 @@ class _Header extends StatelessWidget {
               color: AppColors.textMuted,
             ),
           ),
-          if (totals.fillUps > 0) ...[
+          if (vm.fillUps.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111827),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                children: [
-                  _Total(label: 'Spent', value: formatPesos(totals.totalSpent)),
-                  _Total(label: 'Distance', value: formatKm(totals.totalKm)),
-                  _Total(
-                    label: 'Per km',
-                    value: formatCostPerKm(totals.costPerKm),
-                  ),
-                ],
+            TrackerSummaryCard(
+              log: vm.log,
+              totals: vm.totals,
+              now: DateTime.now(),
+              onOpenAnalytics: () => Navigator.push(
+                context,
+                appRoute(context, (_) => const AnalyticsView()),
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _Total extends StatelessWidget {
-  final String label;
-  final String value;
-  const _Total({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textMuted,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              letterSpacing: -0.3,
-            ),
-          ),
         ],
       ),
     );

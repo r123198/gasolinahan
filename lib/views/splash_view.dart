@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/app_logo.dart';
+import '../services/onboarding_prefs.dart';
 import '../viewmodels/auth_viewmodel.dart';
+
+const _minSplashTime = Duration(milliseconds: 1200);
 
 class SplashView extends StatefulWidget {
   const SplashView({super.key});
@@ -17,19 +20,23 @@ class _SplashViewState extends State<SplashView> {
     _navigateToNext();
   }
 
-  void _navigateToNext() async {
+  /// Auth check, welcome-tour check and a short brand pause run together;
+  /// none of them can throw, so the splash never gets stuck.
+  Future<void> _navigateToNext() async {
     final authViewModel = context.read<AuthViewModel>();
-    await authViewModel.checkAuthState();
-
-    // Brief splash delay
-    await Future.delayed(const Duration(seconds: 2));
+    final results = await Future.wait<Object?>([
+      OnboardingPrefs().checkAndRecordLaunch(DateTime.now()),
+      authViewModel.checkAuthState(),
+      Future<void>.delayed(_minSplashTime),
+    ]);
+    final showWelcome = results.first as bool;
 
     if (!mounted) return;
-
-    if (authViewModel.isAuthenticated) {
-      Navigator.pushReplacementNamed(context, '/dashboard');
+    final next = authViewModel.isAuthenticated ? '/dashboard' : '/login';
+    if (showWelcome) {
+      Navigator.pushReplacementNamed(context, '/welcome', arguments: next);
     } else {
-      Navigator.pushReplacementNamed(context, '/login');
+      Navigator.pushReplacementNamed(context, next);
     }
   }
 
