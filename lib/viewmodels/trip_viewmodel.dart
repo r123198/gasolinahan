@@ -4,6 +4,7 @@ import '../models/trip_model.dart';
 import '../models/trip_point.dart';
 import '../services/driving_activity_source.dart';
 import '../services/location_source.dart';
+import '../services/tracking_consent.dart';
 import '../services/trip_service.dart';
 import '../services/trip_tracker.dart';
 
@@ -13,16 +14,19 @@ class TripViewModel extends ChangeNotifier {
   final TripService _service;
   final LocationSource _source;
   final DrivingActivitySource _activity;
+  final TrackingConsentStore _consent;
 
   TripViewModel({
     TripTracker? tracker,
     TripService? service,
     LocationSource? source,
     DrivingActivitySource? activity,
+    TrackingConsentStore? consent,
   }) : _tracker = tracker ?? TripTracker(),
        _service = service ?? TripService(),
        _source = source ?? DeviceLocationSource(),
-       _activity = activity ?? DeviceDrivingActivitySource();
+       _activity = activity ?? DeviceDrivingActivitySource(),
+       _consent = consent ?? PrefsTrackingConsentStore();
 
   StreamSubscription<TripPoint>? _subscription;
   final StreamController<TripPoint> _locationUpdates =
@@ -33,10 +37,19 @@ class TripViewModel extends ChangeNotifier {
   bool _manualPending = false;
   bool _isMonitoring = false;
   bool _permissionDenied = false;
+  bool? _autoTracking;
+  bool _isStarting = false;
+
+  /// Bumped by every start and stop, so a start that was waiting on a
+  /// permission prompt can tell it has been cancelled.
+  int _session = 0;
   List<Trip> _history = const [];
   String? _errorMessage;
 
   bool get isMonitoring => _isMonitoring;
+
+  /// Whether the user allowed automatic trip tracking; null = never asked.
+  bool? get autoTrackingChoice => _autoTracking;
   bool get permissionDenied => _permissionDenied;
   bool get isTracking => _tracker.isTracking || _manualPending;
   double get liveDistanceKm => _tracker.distanceMeters / 1000;
@@ -48,27 +61,91 @@ class TripViewModel extends ChangeNotifier {
   Stream<TripPoint> get locationUpdates => _locationUpdates.stream;
   String? get errorMessage => _errorMessage;
 
-  /// Starts watching for drives. Safe to call more than once.
-  Future<void> startMonitoring() async {
-    if (_isMonitoring) return;
-    final allowed = await _source.start();
-    _permissionDenied = !allowed;
-    if (!allowed) {
-      notifyListeners();
+  /// Starts automatic trip tracking if the user has allowed it. Until they
+  /// answer the disclosure, nothing runs in the background.
+  Future<void> startAutoTracking() async {
+    _autoTracking = await _consent.read();
+    notifyListeners();
+    if (_autoTracking == true) await startMonitoring();
+  }
+
+  /// Saves the user's answer and starts or stops watching to match.
+  Future<void> setAutoTracking(bool allowed) async {
+    await _consent.write(allowed);
+    _autoTracking = allowed;
+    notifyListeners();
+    if (allowed) {
+      // Already watching for a one-off trip: add the motion hint now.
+      if (_isMonitoring && _activitySubscription == null) {
+        await _listenForVehicle(_session);
+      }
+      await startMonitoring();
       return;
     }
-    _isMonitoring = true;
-    await _recoverInterruptedTrips();
-    _subscription = _source.points.listen(
-      _onPoint,
-      onError: (Object e) {
-        _errorMessage = 'Location is unavailable right now.';
-        if (kDebugMode) print('Location stream error: $e');
+    if (isTracking) await stopNow(); // also stops watching
+    await stopMonitoring();
+  }
+
+  /// On sign-out or account deletion: ends any trip, stops watching, and
+  /// forgets the answer so the next account sees the disclosure.
+  Future<void> forgetAutoTracking() async {
+    _autoTracking = null;
+    if (isTracking) await stopNow();
+    await stopMonitoring();
+    await _consent.clear();
+    notifyListeners();
+  }
+
+  /// Stops watching location and motion, including a start still waiting
+  /// on a permission prompt. Safe to call when not monitoring.
+  Future<void> stopMonitoring() async {
+    final wasActive = _isMonitoring || _isStarting;
+    _session++; // an in-flight start sees this and backs out
+    if (!wasActive) return;
+    await _teardown();
+    notifyListeners();
+  }
+
+  Future<void> _teardown() async {
+    await _subscription?.cancel();
+    _subscription = null;
+    await _activitySubscription?.cancel();
+    _activitySubscription = null;
+    _isMonitoring = false;
+    _lastPoint = null;
+    await _source.stop();
+  }
+
+  /// Starts watching for drives. Safe to call more than once. Motion
+  /// detection only runs once the user has allowed automatic tracking.
+  Future<void> startMonitoring() async {
+    if (_isMonitoring || _isStarting) return;
+    _isStarting = true;
+    final session = ++_session;
+    try {
+      final allowed = await _source.start();
+      if (session != _session) return _teardown();
+      _permissionDenied = !allowed;
+      if (!allowed) {
         notifyListeners();
-      },
-    );
-    await _listenForVehicle();
-    await loadHistory();
+        return;
+      }
+      _isMonitoring = true;
+      await _recoverInterruptedTrips();
+      if (session != _session) return _teardown();
+      _subscription = _source.points.listen(
+        _onPoint,
+        onError: (Object e) {
+          _errorMessage = 'Location is unavailable right now.';
+          if (kDebugMode) print('Location stream error: $e');
+          notifyListeners();
+        },
+      );
+      if (_autoTracking == true) await _listenForVehicle(session);
+      await loadHistory();
+    } finally {
+      _isStarting = false;
+    }
   }
 
   /// "Track me": start a trip now rather than waiting for driving speed.
@@ -90,6 +167,8 @@ class TripViewModel extends ChangeNotifier {
     final trip = _tracker.stopManual(DateTime.now());
     await _source.setPrecise(false);
     if (trip != null) await _finishActive(trip);
+    // A one-off trip: without automatic tracking, stop watching after it.
+    if (_autoTracking != true) await stopMonitoring();
     notifyListeners();
   }
 
@@ -158,9 +237,10 @@ class TripViewModel extends ChangeNotifier {
 
   /// Uses the phone's own driving sense as a hint: sample GPS closely and let
   /// a trip start sooner. Optional, so any failure is ignored.
-  Future<void> _listenForVehicle() async {
+  Future<void> _listenForVehicle(int session) async {
     try {
       if (!await _activity.start()) return;
+      if (session != _session) return; // stopped while asking
       _activitySubscription = _activity.inVehicle.listen(
         _onVehicleSignal,
         onError: (Object e) {

@@ -21,11 +21,11 @@ import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
+import '../viewmodels/trip_viewmodel.dart';
 import 'account_sheets.dart';
-import 'notifications_settings_view.dart';
-import 'plus_view.dart';
 import 'privacy_view.dart';
 import 'report_history_sheet.dart';
+import 'tracking_disclosure_sheet.dart';
 
 const _recentReportLimit = 3;
 
@@ -120,11 +120,31 @@ class _ProfileViewState extends State<ProfileView> {
     );
     if (!confirmed || !mounted) return;
     final fillUps = context.read<FillUpViewModel>();
+    final trips = context.read<TripViewModel>();
     await context.read<AuthViewModel>().signOut();
+    // The next account on this phone answers the disclosure for itself.
+    await trips.forgetAutoTracking();
     // Signed out, the log shows no account's fill-ups.
     unawaited(fillUps.load());
     if (!mounted) return;
     // Clear the whole stack so Back can't return to signed-in screens.
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pushNamedAndRemoveUntil('/login', (_) => false);
+  }
+
+  Future<void> _deleteAccount() async {
+    final fillUps = context.read<FillUpViewModel>();
+    final trips = context.read<TripViewModel>();
+    final deleted = await showDeleteAccountSheet(context);
+    if (!deleted) return;
+    await trips.forgetAutoTracking();
+    if (!mounted) return;
+    // This phone's data was wiped; drop what the screens still hold.
+    unawaited(fillUps.load());
+    unawaited(trips.loadHistory());
+    showAppToast(context, 'Your account was deleted');
     Navigator.of(
       context,
       rootNavigator: true,
@@ -204,21 +224,11 @@ class _ProfileViewState extends State<ProfileView> {
           _Card(
             child: Column(
               children: [
-                AppListTile(
-                  icon: Icons.notifications_none,
-                  title: 'Notifications',
-                  onTap: () => _push(const NotificationsSettingsView()),
-                ),
+                const _AutoTrackingTile(),
                 AppListTile(
                   icon: Icons.shield_outlined,
                   title: 'Privacy & security',
                   onTap: () => _push(const PrivacyView()),
-                ),
-                AppListTile(
-                  icon: Icons.workspace_premium_outlined,
-                  title: 'Gasolinahan Plus',
-                  subtitle: user?.subscriptionTier,
-                  onTap: () => _push(const PlusView()),
                 ),
               ],
             ),
@@ -230,6 +240,15 @@ class _ProfileViewState extends State<ProfileView> {
               title: 'Log out',
               isDestructive: true,
               onTap: _logOut,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _Card(
+            child: AppListTile(
+              icon: Icons.delete_outline,
+              title: 'Delete account',
+              isDestructive: true,
+              onTap: _deleteAccount,
             ),
           ),
           const SizedBox(height: 20),
@@ -438,6 +457,46 @@ class ReportTile extends StatelessWidget {
           fontSize: 14,
           fontWeight: FontWeight.w700,
           color: AppColors.goStrong,
+        ),
+      ),
+    );
+  }
+}
+
+/// Turns automatic trip tracking on (after the disclosure) or off.
+class _AutoTrackingTile extends StatelessWidget {
+  const _AutoTrackingTile();
+
+  Future<void> _set(BuildContext context, bool on) async {
+    final trips = context.read<TripViewModel>();
+    if (!on) {
+      await trips.setAutoTracking(false);
+      return;
+    }
+    final agreed = await showTrackingDisclosure(context);
+    if (agreed != true) return;
+    await trips.setAutoTracking(true);
+    if (!context.mounted || !trips.permissionDenied) return;
+    showAppToast(
+      context,
+      'Allow location (choose "Always") so trips can be tracked.',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final on = context.select<TripViewModel, bool>(
+      (t) => t.autoTrackingChoice == true,
+    );
+    return MergeSemantics(
+      child: AppListTile(
+        icon: Icons.route_outlined,
+        title: 'Automatic trip tracking',
+        subtitle: on ? 'On, with fill-up reminders' : 'Off',
+        onTap: () => _set(context, !on),
+        trailing: Switch.adaptive(
+          value: on,
+          onChanged: (value) => _set(context, value),
         ),
       ),
     );

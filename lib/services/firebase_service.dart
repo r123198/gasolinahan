@@ -105,6 +105,59 @@ class FirebaseService {
     await user.updatePassword(newPassword);
   }
 
+  /// Deletes the account and everything stored for it in the cloud:
+  /// fill-ups, points history, price reports, profile photo and profile.
+  /// Firebase only deletes recently signed-in accounts, so the password is
+  /// checked first. The sign-in account goes last: a failure part-way
+  /// leaves the user signed in and able to try again.
+  Future<void> deleteAccount(String password) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) {
+      throw FirebaseAuthException(code: 'user-not-found');
+    }
+    await user.reauthenticateWithCredential(
+      EmailAuthProvider.credential(email: email, password: password),
+    );
+    final uid = user.uid;
+    // The photo first: if Storage refuses, nothing else is gone yet.
+    await _deleteProfileImage(uid);
+    final profile = _firestore.collection('users').doc(uid);
+    await _deleteAll(profile.collection('fill_ups'));
+    await _deleteAll(profile.collection('points_ledger'));
+    await _deleteAll(
+      _firestore.collection('reports').where('userId', isEqualTo: uid),
+    );
+    await profile.delete();
+    await user.delete();
+  }
+
+  /// Under Firestore's 500-writes-per-batch limit.
+  static const _deleteBatchSize = 400;
+
+  Future<void> _deleteAll(Query<Map<String, dynamic>> query) async {
+    final docs = (await query.get()).docs;
+    for (var i = 0; i < docs.length; i += _deleteBatchSize) {
+      final batch = _firestore.batch();
+      for (final doc in docs.skip(i).take(_deleteBatchSize)) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+  }
+
+  Future<void> _deleteProfileImage(String uid) async {
+    try {
+      await _profileImageRef(uid).delete();
+    } on FirebaseException catch (e) {
+      // Most users never set a photo.
+      if (e.code != 'object-not-found') rethrow;
+    }
+  }
+
+  Reference _profileImageRef(String uid) =>
+      FirebaseStorage.instance.ref().child('profile_images').child('$uid.jpg');
+
   Future<UserModel> _getOrCreateUserDoc(User authUser) async {
     final doc = await _firestore.collection('users').doc(authUser.uid).get();
 
@@ -176,10 +229,7 @@ class FirebaseService {
   // ── User Profile ─────────────────────────────────────
 
   Future<String> uploadProfileImage(String userId, File imageFile) async {
-    final ref = FirebaseStorage.instance
-        .ref()
-        .child('profile_images')
-        .child('$userId.jpg');
+    final ref = _profileImageRef(userId);
     await ref.putFile(imageFile);
     final url = await ref.getDownloadURL();
     await _firestore.collection('users').doc(userId).update({

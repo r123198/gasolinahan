@@ -25,6 +25,13 @@ class FillUpPhotoStore {
     return copy.path;
   }
 
+  /// Deletes every stored photo, for when the account is deleted.
+  Future<void> discardAll() async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory(p.join(docs.path, _folder));
+    if (await dir.exists()) await dir.delete(recursive: true);
+  }
+
   /// Deletes stored photos; missing files are ignored.
   Future<void> discard(Iterable<String> paths) async {
     for (final path in paths) {

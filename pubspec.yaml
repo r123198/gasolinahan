@@ -1,5 +1,5 @@
 name: gasolinahan
-description: "A new Flutter project."
+description: "Crowdsourced fuel prices, fill-up log and trip tracking for drivers in the Philippines."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -63,6 +63,7 @@ dependencies:
   flutter_local_notifications: ^22.3.1
   fl_chart: ^1.2.0
   shared_preferences: ^2.5.6
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

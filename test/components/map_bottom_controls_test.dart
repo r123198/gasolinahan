@@ -5,7 +5,7 @@ import 'package:gasolinahan/viewmodels/trip_viewmodel.dart';
 import 'package:provider/provider.dart';
 
 import '../services/trip_viewmodel_test.dart'
-    show FakeActivity, FakeService, FakeSource;
+    show FakeActivity, FakeConsent, FakeService, FakeSource;
 
 void main() {
   testWidgets('tracking label fits beside the buttons on a 320px phone', (
@@ -19,6 +19,7 @@ void main() {
       source: FakeSource(),
       service: FakeService(),
       activity: FakeActivity(),
+      consent: FakeConsent(true),
     );
     addTearDown(trips.dispose);
     await tester.runAsync(() async {

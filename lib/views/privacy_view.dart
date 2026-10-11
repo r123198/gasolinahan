@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../components/app_circle_button.dart';
+import '../components/app_list_tile.dart';
 import '../ui/adaptive/app_nav_bar.dart';
 import '../ui/adaptive/app_platform.dart';
+import '../services/app_links.dart';
+import '../ui/adaptive/app_toast.dart';
 import '../ui/app_theme.dart';
 
 class PrivacyView extends StatelessWidget {
@@ -53,51 +56,47 @@ class PrivacyView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildSection(
-              'Privacy Policy',
-              'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '
-                  'Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. '
-                  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris '
-                  'nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in '
-                  'reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla '
-                  'pariatur. Excepteur sint occaecat cupidatat non proident, sunt in '
-                  'culpa qui officia deserunt mollit anim id est laborum.',
+              'What leaves your phone',
+              'Your name, email and optional profile photo, to run your '
+                  'account. Your fill-up log, including where you logged it, so '
+                  'it follows you to a new phone. Price reports with the '
+                  "station's location. Station prices are shown to everyone "
+                  'without your name.',
+            ),
+            const SizedBox(height: 16),
+            _buildSection(
+              'What stays on your phone',
+              'Recorded trips and kilometers, fill-up photos, and the price '
+                  'boards and odometers you scan. Text is read on your phone '
+                  'and the photos are never uploaded.',
+            ),
+            const SizedBox(height: 16),
+            _buildSection(
+              'Location and motion',
+              'Location shows stations near you. With automatic trip '
+                  'tracking on, location and motion are also used in the '
+                  'background to record drives. You can turn that off in '
+                  'Account. Map tiles and place names come from OpenStreetMap, '
+                  'which receives the map area you look at.',
+            ),
+            const SizedBox(height: 16),
+            _buildSection(
+              'No ads, no tracking',
+              "Gasolinahan has no ads or analytics, and doesn't sell or share "
+                  'your data for advertising. Data is stored with Google '
+                  'Firebase.',
+            ),
+            const SizedBox(height: 16),
+            _buildSection(
+              'Your rights',
+              'You can see and edit your details in Account, and delete '
+                  'your account and its data any time from Account → Delete '
+                  'account. Questions: $supportEmail',
             ),
             const SizedBox(height: 24),
-            _buildSection(
-              'Data Collection',
-              'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '
-                  'Praesent commodo cursus magna, vel scelerisque nisl consectetur et. '
-                  'Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. '
-                  'Nullam quis risus eget urna mollis ornare vel eu leo. '
-                  'Cras mattis consectetur purus sit amet fermentum.',
-            ),
-            const SizedBox(height: 24),
-            _buildSection(
-              'Data Sharing',
-              'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '
-                  'Maecenas sed diam eget risus varius blandit sit amet non magna. '
-                  'Integer posuere erat a ante venenatis dapibus posuere velit aliquet. '
-                  'Donec id elit non mi porta gravida at eget metus. '
-                  'Fusce dapibus, tellus ac cursus commodo.',
-            ),
-            const SizedBox(height: 24),
-            _buildSection(
-              'Security Measures',
-              'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '
-                  'Aenean lacinia bibendum nulla sed consectetur. '
-                  'Cras justo odio, dapibus ut facilisis in, egestas eget quam. '
-                  'Morbi leo risus, porta ac consectetur ac, vestibulum at eros. '
-                  'Nulla vitae elit libero, a pharetra augue.',
-            ),
-            const SizedBox(height: 24),
-            _buildSection(
-              'Your Rights',
-              'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '
-                  'Donec ullamcorper nulla non metus auctor fringilla. '
-                  'Vestibulum id ligula porta felis euismod semper. '
-                  'Cum sociis natoque penatibus et magnis dis parturient montes, '
-                  'nascetur ridiculus mus.',
-            ),
+            _LinkTile(label: 'Full privacy policy', url: privacyPolicyUrl),
+            _LinkTile(label: 'Terms of use', url: termsUrl),
+            _LinkTile(label: 'Help and support', url: supportUrl),
           ],
         ),
       ),
@@ -141,6 +140,27 @@ class PrivacyView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LinkTile extends StatelessWidget {
+  final String label;
+  final Uri url;
+
+  const _LinkTile({required this.label, required this.url});
+
+  Future<void> _open(BuildContext context) async {
+    if (await openLink(url) || !context.mounted) return;
+    showAppToast(context, "Couldn't open the browser. Visit $url");
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppListTile(
+      icon: Icons.open_in_new,
+      title: label,
+      onTap: () => _open(context),
     );
   }
 }

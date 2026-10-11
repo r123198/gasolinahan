@@ -3,9 +3,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../services/firebase_service.dart';
+import '../services/local_account_data.dart';
 
 class AuthViewModel extends ChangeNotifier {
-  final FirebaseService _firebaseService = FirebaseService();
+  final FirebaseService _firebaseService;
+  final LocalAccountData _localData;
+
+  AuthViewModel({FirebaseService? firebaseService, LocalAccountData? localData})
+    : _firebaseService = firebaseService ?? FirebaseService(),
+      _localData = localData ?? LocalAccountData();
 
   UserModel? _currentUser;
   bool _isLoading = false;
@@ -127,6 +133,26 @@ class AuthViewModel extends ChangeNotifier {
 
   Future<String?> changePassword(String current, String next) =>
       _runAccountAction(() => _firebaseService.changePassword(current, next));
+
+  /// Deletes the account in the cloud, then this phone's copy of the
+  /// user's data. Returns null on success, or a message to show the user.
+  Future<String?> deleteAccount(String password) async {
+    if (_currentUser == null) return 'You are signed out. Sign in again.';
+    final error = await _runAccountAction(
+      () => _firebaseService.deleteAccount(password),
+    );
+    if (error != null) return error;
+    _currentUser = null;
+    notifyListeners();
+    try {
+      await _localData.wipe();
+    } on Exception catch (e) {
+      // The account is already gone; leftovers here can't be tied back to
+      // it, so the deletion still counts as done.
+      debugPrint('Local data wipe after account deletion failed: $e');
+    }
+    return null;
+  }
 
   Future<String?> _runAccountAction(Future<void> Function() action) async {
     _setLoading(true);

@@ -9,15 +9,16 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
 
-      // Why points changed. Append-only from the app; awards themselves
-      // must move server-side before points can be redeemed.
+      // Why points changed. Append-only from the app (delete is only for
+      // account deletion); awards themselves must move server-side before
+      // points can be redeemed.
       match /points_ledger/{entryId} {
-        allow read: if isSignedIn() && request.auth.uid == uid;
+        allow read, delete: if isSignedIn() && request.auth.uid == uid;
         allow create: if isSignedIn() && request.auth.uid == uid
                       && request.resource.data.points is int
                       && request.resource.data.points >= -50
                       && request.resource.data.points <= 50;
-        allow update, delete: if false;
+        allow update: if false;
       }
 
       // Fill-up log, synced across the owner's devices.
@@ -39,11 +40,13 @@ service cloud.firestore {
     }
 
     // Users create their own reports and can only read their own history.
+    // Delete is for account deletion.
     match /reports/{reportId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read, delete: if isSignedIn()
+                          && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn()
                     && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if false;
     }
   }
 }

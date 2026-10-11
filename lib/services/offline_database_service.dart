@@ -62,6 +62,22 @@ class OfflineDatabaseService {
     }
   }
 
+  /// Empties every table of personal data in one go, for account deletion.
+  /// trip_points goes before trips so the foreign key never dangles.
+  static Future<void> clearPersonalData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final table in const [
+        'fill_ups',
+        'trip_points',
+        'trips',
+        'pending_reports',
+      ]) {
+        await txn.delete(table);
+      }
+    });
+  }
+
   static Future<void> _ensureFillUpColumns(Database db) async {
     await _ensureColumns(db, 'fill_ups', _fillUpDetailColumns);
     await _ensureColumns(db, 'pending_reports', _pendingReportColumns);

@@ -29,6 +29,7 @@ import 'nearby_stations_sheet.dart';
 import 'station_detail_sheet.dart';
 import 'home_view.dart';
 import 'profile_view.dart';
+import 'tracking_disclosure_sheet.dart';
 
 /// One bottom-navigation destination.
 typedef _NavTab = ({IconData icon, IconData selectedIcon, String label});
@@ -94,10 +95,13 @@ class _DashboardViewState extends State<DashboardView> {
     _fillUpsVm = context.read<FillUpViewModel>();
     _nudgesVm = context.read<FillUpNudgeViewModel>();
     _searchController.addListener(() => setState(() {}));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<DashboardViewModel>().listenToStations();
       // Signed in by now: pull this account's fill-ups from the cloud.
       _fillUpsVm.load();
+      // Explain background tracking before any location prompt appears.
+      await _askAboutAutoTracking();
+      if (!mounted) return;
       _startTripsAndNudges();
       _initLocation();
     });
@@ -118,7 +122,19 @@ class _DashboardViewState extends State<DashboardView> {
     super.dispose();
   }
 
-  /// Trip recording and "Did you fill up?" nudges share one location stream.
+  /// Starts automatic tracking if allowed earlier; otherwise shows the
+  /// disclosure once and saves the answer.
+  Future<void> _askAboutAutoTracking() async {
+    final trips = context.read<TripViewModel>();
+    await trips.startAutoTracking();
+    if (trips.autoTrackingChoice != null || !mounted) return;
+    final allowed = await showTrackingDisclosure(context);
+    // Dismissed without an answer: ask again next time.
+    if (allowed != null) await trips.setAutoTracking(allowed);
+  }
+
+  /// Trip recording and "Did you fill up?" nudges share one location stream,
+  /// which only runs while automatic tracking is on.
   Future<void> _startTripsAndNudges() async {
     final trips = context.read<TripViewModel>();
     _stationsVm.addListener(_syncNudgeStations);
@@ -126,7 +142,6 @@ class _DashboardViewState extends State<DashboardView> {
     _nudgesVm.addListener(_openNudgedFillUp);
     _syncNudgeStations();
     _syncNudgeFillUps();
-    await trips.startMonitoring();
     await _nudgesVm.start(trips.locationUpdates);
     _openNudgedFillUp(); // the app may have been opened from a nudge
   }

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:location/location.dart';
 import '../models/trip_point.dart';
 
@@ -9,6 +11,9 @@ abstract class LocationSource {
   Future<bool> start();
 
   Stream<TripPoint> get points;
+
+  /// Stops background updates, for when automatic tracking is turned off.
+  Future<void> stop();
 
   /// Sample often while driving, sparingly while waiting, to save battery.
   Future<void> setPrecise(bool precise);
@@ -44,6 +49,15 @@ class DeviceLocationSource implements LocationSource {
       // Background mode needs "Always" permission; foreground still works.
     }
     return true;
+  }
+
+  @override
+  Future<void> stop() async {
+    try {
+      await _location.enableBackgroundMode(enable: false);
+    } on PlatformException catch (e) {
+      debugPrint('Could not turn off background location: ${e.code}');
+    }
   }
 
   @override
