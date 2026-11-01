@@ -77,19 +77,13 @@ dev builds stop with "missing google-services.json" (Android) or "Missing
 To seed dev with test data, the debug-only `/seed` screen works as before.
 It writes to whichever project the running flavor uses.
 
-## Storage (profile photos)
+## Profile photos (no Storage bucket needed)
 
-Profile photos use Cloud Storage. Firebase projects created since late
-2024 only get a Storage bucket on the pay-as-you-go **Blaze** plan. Blaze
-needs a billing card, but a small app stays inside its free usage. The
-production project currently appears to have no bucket, so profile photo
-upload fails there. Either:
-
-- upgrade production (and dev, if you want photos there) to Blaze and
-  create the bucket, or
-- hide the Profile photo option until then.
-
-Account deletion copes with a missing bucket either way.
+Profile photos are resized on the phone and saved inside the user's
+Firestore document as a data URL (`lib/models/image_data_url.dart`), so
+neither project needs a Cloud Storage bucket. Firebase projects created
+since late 2024 only get a bucket on the pay-as-you-go Blaze plan, and the
+production project has none. Don't add features that depend on Storage.
 
 ## How it's wired
 

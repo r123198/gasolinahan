@@ -11,7 +11,7 @@ class DashboardViewModel extends ChangeNotifier {
   List<StationModel> _nearbyStations = [];
   bool _isLoading = true;
   FuelType _fuelType = FuelType.regular;
-  bool _onlyWithPrices = true;
+  bool _onlyWithPrices = false;
   String? _errorMessage;
   StreamSubscription? _stationsSubscription;
 
@@ -35,18 +35,25 @@ class DashboardViewModel extends ChangeNotifier {
         ? list.where((s) => priceOf(s) > 0).toList()
         : list;
 
-    filtered.sort((a, b) => priceOf(a).compareTo(priceOf(b)));
+    // Cheapest first; stations with no price for this fuel go last.
+    double rank(StationModel s) {
+      final p = priceOf(s);
+      return p > 0 ? p : double.infinity;
+    }
+
+    filtered.sort((a, b) => rank(a).compareTo(rank(b)));
     return filtered;
   }
 
-  /// Start listening to real-time station updates
+  /// Start listening to real-time station updates (the directory
+  /// document: every station in one read).
   void listenToStations() {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     _stationsSubscription?.cancel();
-    _stationsSubscription = _firebaseService.stationsStream().listen(
+    _stationsSubscription = _firebaseService.directoryStream().listen(
       (stations) {
         _nearbyStations = stations;
         _isLoading = false;
@@ -69,7 +76,7 @@ class DashboardViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _nearbyStations = await _firebaseService.getNearbyStations();
+      _nearbyStations = await _firebaseService.getDirectory();
     } catch (e) {
       _errorMessage = 'Could not load nearby stations.';
       if (kDebugMode) {
@@ -78,6 +85,17 @@ class DashboardViewModel extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Hours, phone and website live on the station document, not in the
+  /// directory; fetched when a station is opened.
+  Future<StationModel?> loadDetails(String stationId) async {
+    try {
+      return await _firebaseService.getStation(stationId);
+    } on Exception catch (e) {
+      if (kDebugMode) print('Station details failed: $e');
+      return null;
     }
   }
 

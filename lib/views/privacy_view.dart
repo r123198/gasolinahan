@@ -76,8 +76,9 @@ class PrivacyView extends StatelessWidget {
               'Location shows stations near you. With automatic trip '
                   'tracking on, location and motion are also used in the '
                   'background to record drives. You can turn that off in '
-                  'Account. Map tiles and place names come from OpenStreetMap, '
-                  'which receives the map area you look at.',
+                  'Account. Map tiles come from OpenFreeMap and place names '
+                  'from OpenStreetMap (both built on OpenStreetMap data); '
+                  'they receive the map area you look at.',
             ),
             const SizedBox(height: 16),
             _buildSection(

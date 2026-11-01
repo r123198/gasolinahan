@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/app_primary_button.dart';
@@ -26,6 +28,9 @@ import 'fill_up_location.dart';
 part 'fill_up_form_helpers.dart';
 
 const _maxStationChips = 5;
+
+/// How long a save waits for a GPS fix that's still coming.
+const _pendingFixWait = Duration(seconds: 5);
 const _fuelLabels = {
   FuelType.regular: 'Regular',
   FuelType.premium: 'Premium',
@@ -100,6 +105,9 @@ class _FillUpFormState extends State<_FillUpForm> {
   double? _latitude;
   double? _longitude;
   bool _locating = false;
+
+  /// Completes once the GPS fix is in, or the lookup gave up.
+  final _fixSettled = Completer<void>();
 
   /// Area name from OpenStreetMap, used for the branch once a brand is set.
   String? _suggestedArea;
@@ -270,12 +278,16 @@ class _FillUpFormState extends State<_FillUpForm> {
     setState(() => _locating = true);
     final guess = await guessFillUpLocation(
       reportedStations: context.read<DashboardViewModel>().nearbyStations,
+      onFix: (lat, lng) {
+        _latitude = lat;
+        _longitude = lng;
+        if (!_fixSettled.isCompleted) _fixSettled.complete();
+      },
     );
+    if (!_fixSettled.isCompleted) _fixSettled.complete();
     if (!mounted) return;
     setState(() => _locating = false);
     if (guess == null) return;
-    _latitude = guess.latitude;
-    _longitude = guess.longitude;
     final alreadyChosen = _station != null || _brand != null || _typedOther;
     // Our own suggestions aren't the user's edits: closing an untouched
     // form shouldn't ask to discard anything.
@@ -396,6 +408,8 @@ class _FillUpFormState extends State<_FillUpForm> {
     final vm = context.read<FillUpViewModel>();
     final navigator = Navigator.of(context);
     setState(() => _isSaving = true);
+    await _awaitPendingFix();
+    if (!mounted) return;
 
     final fillUp = FillUp(
       id: widget.editing?.id,
@@ -438,6 +452,17 @@ class _FillUpFormState extends State<_FillUpForm> {
     }
     showAppToast(context, _isEditing ? 'Changes saved' : _savedMessage(vm));
     navigator.pop();
+  }
+
+  /// Saved straight after opening: give a GPS fix still on its way a moment
+  /// to arrive, so the fill-up keeps where it was logged.
+  Future<void> _awaitPendingFix() async {
+    if (_isEditing || _latitude != null || _fixSettled.isCompleted) return;
+    try {
+      await _fixSettled.future.timeout(_pendingFixWait);
+    } on TimeoutException {
+      // Save without coordinates rather than keep the user waiting.
+    }
   }
 
   /// "Fill-up saved · +2 points", or why it earned none.

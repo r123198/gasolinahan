@@ -128,3 +128,8 @@ ui-debug.log
 *.psd
 *.sketch
 *.fig
+
+# ── Station import tool ─────────────────────────────────
+tool/stations/node_modules/
+tool/stations/out/
+*serviceAccount*.json

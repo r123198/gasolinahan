@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../components/app_empty_state.dart';
 import '../components/brand_logo.dart';
 import '../models/station_model.dart';
+import '../models/station_search.dart';
 import '../services/geo.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_sheet.dart';
@@ -13,7 +14,8 @@ import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
 
-const _fuelLabels = {
+/// Short names for the fuel grades, for list rows and filter chips.
+const fuelTypeLabels = {
   FuelType.regular: 'Regular',
   FuelType.premium: 'Premium',
   FuelType.diesel: 'Diesel',
@@ -97,7 +99,26 @@ class _NearbyStations extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DashboardViewModel>(
       builder: (context, vm, _) {
-        final stations = filterStations(vm.visibleStations, query);
+        // Priced stations cheapest first (the view model's order), then
+        // the ones without a price, closest first.
+        final matching = filterStations(vm.visibleStations, query);
+        double priceOf(StationModel s) => switch (vm.fuelType) {
+          FuelType.regular => s.regularPrice,
+          FuelType.premium => s.premiumPrice,
+          FuelType.diesel => s.dieselPrice,
+        };
+        final stations = [
+          for (final s in matching)
+            if (priceOf(s) > 0) s,
+          ...nearestFirst(
+            [
+              for (final s in matching)
+                if (priceOf(s) <= 0) s,
+            ],
+            userLat: userLat,
+            userLng: userLng,
+          ),
+        ];
         return CustomScrollView(
           controller: scrollController,
           slivers: [
@@ -129,7 +150,7 @@ class _NearbyStations extends StatelessWidget {
                       ? 'No stations found'
                       : 'No stations match "$query"',
                   subtitle: vm.onlyWithPrices
-                      ? 'Turn off "With ${_fuelLabels[vm.fuelType]} price" '
+                      ? 'Turn off "With ${fuelTypeLabels[vm.fuelType]} price" '
                             'to see every station.'
                       : 'Try a different name or area.',
                 ),
@@ -142,14 +163,14 @@ class _NearbyStations extends StatelessWidget {
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (context, i) {
                     final s = stations[i];
-                    return _StationRow(
+                    return StationRow(
                       station: s,
                       price: switch (vm.fuelType) {
                         FuelType.regular => s.regularPrice,
                         FuelType.premium => s.premiumPrice,
                         FuelType.diesel => s.dieselPrice,
                       },
-                      fuelLabel: _fuelLabels[vm.fuelType]!,
+                      fuelLabel: fuelTypeLabels[vm.fuelType]!,
                       isCheapest: s.id == cheapestId,
                       distance: _distanceTo(s),
                       onTap: () => Navigator.pop(context, s),
@@ -203,14 +224,14 @@ class _Header extends StatelessWidget {
             padding: const EdgeInsets.only(right: 12),
             child: FilterChip(
               label: Text(
-                'With ${_fuelLabels[vm.fuelType]} price',
+                'With ${fuelTypeLabels[vm.fuelType]} price',
                 overflow: TextOverflow.ellipsis,
               ),
               tooltip: vm.onlyWithPrices
-                  ? 'Showing only stations with a ${_fuelLabels[vm.fuelType]} '
+                  ? 'Showing only stations with a ${fuelTypeLabels[vm.fuelType]} '
                         'price. Tap to show all.'
                   : 'Tap to hide stations without a '
-                        '${_fuelLabels[vm.fuelType]} price',
+                        '${fuelTypeLabels[vm.fuelType]} price',
               selected: vm.onlyWithPrices,
               onSelected: (_) => vm.toggleOnlyWithPrices(),
             ),
@@ -221,7 +242,10 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _StationRow extends StatelessWidget {
+/// One station in a list: brand mark, name, distance and address, and the
+/// price of the chosen fuel on the right. Tinted green when it's the
+/// cheapest nearby.
+class StationRow extends StatelessWidget {
   final StationModel station;
   final double price;
   final String fuelLabel;
@@ -229,7 +253,8 @@ class _StationRow extends StatelessWidget {
   final String? distance;
   final VoidCallback onTap;
 
-  const _StationRow({
+  const StationRow({
+    super.key,
     required this.station,
     required this.price,
     required this.fuelLabel,
@@ -244,7 +269,10 @@ class _StationRow extends StatelessWidget {
     final subtitle = [
       ?distance,
       if (s.address.isNotEmpty) s.address else if (s.brand.isNotEmpty) s.brand,
-      'Updated ${formatRelativeTime(s.lastUpdated)}',
+      if (s.hasPrices)
+        'Updated ${formatRelativeTime(s.lastUpdated)}'
+      else
+        'No price yet',
     ].join(' · ');
     return Material(
       color: isCheapest ? AppColors.goTint : AppColors.surfaceMuted,

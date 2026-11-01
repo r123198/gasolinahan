@@ -117,8 +117,13 @@ class AuthViewModel extends ChangeNotifier {
       );
       _currentUser = _currentUser!.copyWith(profileImageUrl: url);
       notifyListeners();
-    } catch (e) {
-      _errorMessage = 'Failed to update profile image.';
+    } on ArgumentError {
+      _errorMessage = 'That photo is too large. Try a smaller one.';
+      notifyListeners();
+    } on Exception catch (e) {
+      debugPrint('Profile photo update failed: $e');
+      _errorMessage =
+          "Couldn't save your photo. Check your connection and try again.";
       notifyListeners();
     } finally {
       _setLoading(false);

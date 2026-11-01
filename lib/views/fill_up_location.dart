@@ -1,10 +1,5 @@
-import 'dart:async';
-
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show PlatformException;
-import 'package:location/location.dart';
-
 import '../models/station_model.dart';
+import '../services/current_location.dart';
 import '../services/geo.dart';
 import '../services/place_lookup.dart';
 
@@ -53,30 +48,23 @@ StationModel? reportedStationAt(
 
 /// Finds the user, then what station or area they're at. Null when the
 /// location can't be read (off, denied, or no fix in time) — the form then
-/// just works as before.
+/// just works as before. It never prompts for permission from inside the
+/// form; [locate] defaults to [readCurrentLocation].
+///
+/// [onFix] gets the coordinates as soon as GPS answers, before the
+/// (slower, network) place lookup, so a quick save still keeps them.
 Future<FillUpLocationGuess?> guessFillUpLocation({
   required List<StationModel> reportedStations,
-  Location? location,
+  LocateOnce? locate,
   PlaceLookup? lookup,
+  void Function(double latitude, double longitude)? onFix,
 }) async {
-  final LocationData fix;
-  try {
-    final loc = location ?? Location();
-    final permission = await loc.hasPermission();
-    if (permission != PermissionStatus.granted &&
-        permission != PermissionStatus.grantedLimited) {
-      return null; // never prompt from inside the form
-    }
-    fix = await loc.getLocation().timeout(_locationTimeout);
-  } on TimeoutException {
-    return null;
-  } on PlatformException catch (e) {
-    debugPrint('Fill-up location unavailable: ${e.code}');
-    return null;
-  }
+  final fix =
+      await (locate ?? () => readCurrentLocation(timeout: _locationTimeout))();
+  if (fix == null) return null;
   final lat = fix.latitude;
   final lng = fix.longitude;
-  if (lat == null || lng == null) return null;
+  onFix?.call(lat, lng);
 
   final reported = reportedStationAt(reportedStations, lat, lng);
   return FillUpLocationGuess(

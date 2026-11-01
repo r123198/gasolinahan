@@ -6,6 +6,12 @@ const minTanksForBestBrand = 2;
 const monthsOfSpend = 6;
 const _daysPerMonth = 30;
 
+/// Within this of the average, a tank counts as "your usual".
+const _usualEfficiencyBand = 0.05;
+
+/// How the latest tank compares with the user's own average km/L.
+enum EfficiencyVerdict { efficient, usual, wasteful }
+
 /// How one fuel brand performed in the user's own car.
 class BrandPerformance {
   final String brand;
@@ -33,13 +39,20 @@ class TankRecord {
   final int days;
   final double? kmPerLiter;
 
+  /// What the refill at [measuredAt] cost: the price of driving [km].
+  final double spent;
+
   const TankRecord({
     required this.filledAt,
     required this.measuredAt,
     required this.km,
     required this.days,
+    required this.spent,
     this.kmPerLiter,
   });
+
+  /// Liters this tank burned, when its efficiency is known.
+  double? get liters => kmPerLiter == null ? null : km / kmPerLiter!;
 }
 
 class PriceRecord {
@@ -56,11 +69,15 @@ class TrendPoint {
   const TrendPoint(this.date, this.value);
 }
 
+/// One calendar month: what was spent, how far was driven (tanks measured
+/// that month) and how many fill-ups there were.
 class MonthSpend {
   final DateTime month;
   final double spent;
+  final double km;
+  final int fillUps;
 
-  const MonthSpend(this.month, this.spent);
+  const MonthSpend(this.month, this.spent, {this.km = 0, this.fillUps = 0});
 }
 
 /// Everything the Analytics screen shows, worked out from the fill-up log.
@@ -69,6 +86,8 @@ class MonthSpend {
 /// fuel burned since the previous one, so each tank's km/L belongs to the
 /// fill-up (and brand) *before* it.
 class FuelAnalytics {
+  /// Every fill-up, oldest first.
+  final List<FillUp> fillUps;
   final List<TankRecord> tanks;
   final List<BrandPerformance> brands;
   final List<TrendPoint> efficiencyTrend;
@@ -82,6 +101,7 @@ class FuelAnalytics {
   final PriceRecord? priciestPrice;
 
   const FuelAnalytics._({
+    required this.fillUps,
     required this.tanks,
     required this.brands,
     required this.efficiencyTrend,
@@ -123,6 +143,32 @@ class FuelAnalytics {
   TankRecord? get worstTank =>
       _maxBy(tanks.where((t) => t.kmPerLiter != null), (t) => -t.kmPerLiter!);
 
+  /// The most recent tank with a known km/L.
+  TankRecord? get latestTank =>
+      tanks.where((t) => t.kmPerLiter != null).lastOrNull;
+
+  /// The latest tank's km/L against the average, as a fraction (+0.08 =
+  /// 8% further per liter than usual). Null until two tanks are measured.
+  double? get latestEfficiencyChange {
+    final latest = latestTank?.kmPerLiter;
+    final average = averageKmPerLiter;
+    final measured = tanks.where((t) => t.kmPerLiter != null).length;
+    if (latest == null || average == null || average <= 0 || measured < 2) {
+      return null;
+    }
+    return (latest - average) / average;
+  }
+
+  /// "How wasteful am I lately": the latest tank, judged against the
+  /// user's own average.
+  EfficiencyVerdict? get verdict {
+    final change = latestEfficiencyChange;
+    if (change == null) return null;
+    if (change >= _usualEfficiencyBand) return EfficiencyVerdict.efficient;
+    if (change <= -_usualEfficiencyBand) return EfficiencyVerdict.wasteful;
+    return EfficiencyVerdict.usual;
+  }
+
   double? get averageDaysBetween =>
       _average(tanks.map((t) => t.days.toDouble()));
 
@@ -157,6 +203,7 @@ class FuelAnalytics {
           measuredAt: next.timestamp,
           km: km,
           days: next.timestamp.difference(prev.timestamp).inDays,
+          spent: next.amountSpent,
           kmPerLiter: liters != null && liters > 0 ? km / liters : null,
         ),
       );
@@ -173,6 +220,7 @@ class FuelAnalytics {
     final span = tanks.fold(0, (s, t) => s + t.days);
 
     return FuelAnalytics._(
+      fillUps: List.unmodifiable(ordered),
       tanks: List.unmodifiable(tanks),
       brands: _brandPerformance(tanks, ordered),
       efficiencyTrend: [
@@ -182,7 +230,7 @@ class FuelAnalytics {
       priceTrend: [
         for (final p in prices) TrendPoint(p.fillUp.timestamp, p.pricePerLiter),
       ],
-      monthlySpend: _monthlySpend(ordered, now),
+      monthlySpend: _monthly(ordered, tanks, now),
       averageKmPerLiter: _average([for (final t in tanks) ?t.kmPerLiter]),
       averageCostPerKm: totalKm > 0 ? spentOnMeasuredKm / totalKm : null,
       averagePricePerLiter: _average(prices.map((p) => p.pricePerLiter)),
@@ -239,19 +287,26 @@ class FuelAnalytics {
     return refill.amountSpent;
   }
 
-  static List<MonthSpend> _monthlySpend(List<FillUp> fills, DateTime now) {
+  static List<MonthSpend> _monthly(
+    List<FillUp> fills,
+    List<TankRecord> tanks,
+    DateTime now,
+  ) {
+    bool inMonth(DateTime d, DateTime month) =>
+        d.year == month.year && d.month == month.month;
     return List.unmodifiable([
       for (var back = monthsOfSpend - 1; back >= 0; back--)
         () {
           final month = DateTime(now.year, now.month - back);
-          final spent = fills
-              .where(
-                (f) =>
-                    f.timestamp.year == month.year &&
-                    f.timestamp.month == month.month,
-              )
-              .fold(0.0, (s, f) => s + f.amountSpent);
-          return MonthSpend(month, spent);
+          final inThis = fills.where((f) => inMonth(f.timestamp, month));
+          return MonthSpend(
+            month,
+            inThis.fold(0.0, (s, f) => s + f.amountSpent),
+            km: tanks
+                .where((t) => inMonth(t.measuredAt, month))
+                .fold(0.0, (s, t) => s + t.km),
+            fillUps: inThis.length,
+          );
         }(),
     ]);
   }

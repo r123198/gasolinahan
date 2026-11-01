@@ -5,7 +5,9 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import '../models/user_model.dart';
 import '../models/station_model.dart';
+import '../models/station_directory.dart';
 import '../models/report_model.dart';
+import '../models/image_data_url.dart';
 import '../models/report_upload.dart';
 import 'report_writer.dart';
 import 'sync_service.dart';
@@ -237,6 +239,26 @@ class FirebaseService {
 
   // ── Stations ──────────────────────────────────────────
 
+  DocumentReference<Map<String, dynamic>> get _directoryRef =>
+      _firestore.collection(directoryCollection).doc(directoryDocId);
+
+  /// Every station from the directory document: one read, kept live. If
+  /// the directory hasn't been imported (a fresh dev project), falls back
+  /// to the recently updated station documents.
+  Stream<List<StationModel>> directoryStream() {
+    return _directoryRef.snapshots().asyncExpand((snap) {
+      if (!snap.exists) return stationsStream();
+      return Stream.value(decodeDirectory(snap.data()));
+    });
+  }
+
+  /// One-off read of the directory (manual refresh).
+  Future<List<StationModel>> getDirectory() async {
+    final snap = await _directoryRef.get();
+    if (!snap.exists) return getNearbyStations();
+    return decodeDirectory(snap.data());
+  }
+
   Future<List<StationModel>> getNearbyStations() async {
     final snapshot = await _firestore
         .collection('stations')
@@ -295,13 +317,15 @@ class FirebaseService {
 
   // ── User Profile ─────────────────────────────────────
 
+  /// Saves a (small) profile photo inside the user's document as a data
+  /// URL and returns it. The project has no Storage bucket, so the photo
+  /// can't be uploaded as a file; [imageFile] must already be resized.
   Future<String> uploadProfileImage(String userId, File imageFile) async {
-    final ref = _profileImageRef(userId);
-    await ref.putFile(imageFile);
-    final url = await ref.getDownloadURL();
-    await _firestore.collection('users').doc(userId).update({
+    final bytes = await imageFile.readAsBytes();
+    final url = encodeImageDataUrl(bytes);
+    await _firestore.collection('users').doc(userId).set({
       'profileImageUrl': url,
-    });
+    }, SetOptions(merge: true));
     return url;
   }
 

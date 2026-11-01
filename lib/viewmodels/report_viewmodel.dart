@@ -14,6 +14,7 @@ import '../models/report_matching.dart';
 import '../models/report_points_context.dart';
 import '../models/report_upload.dart';
 import '../models/station_model.dart';
+import '../services/current_location.dart';
 import '../services/firebase_service.dart';
 import '../services/geo.dart';
 import '../services/offline_database_service.dart';
@@ -384,9 +385,10 @@ class ReportViewModel extends ChangeNotifier {
       }
     }
 
-    final loc = await _location.getLocation().timeout(_locationTimeout);
-    _latitude = loc.latitude ?? 0.0;
-    _longitude = loc.longitude ?? 0.0;
+    final fix = await readCurrentLocation(timeout: _locationTimeout);
+    if (fix == null) return;
+    _latitude = fix.latitude;
+    _longitude = fix.longitude;
   }
 
   Future<void> _matchNearbyStations() async {

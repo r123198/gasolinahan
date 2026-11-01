@@ -20,6 +20,7 @@ import '../ui/adaptive/app_tappable.dart';
 import '../ui/adaptive/app_toast.dart';
 import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
+import '../ui/profile_image.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
@@ -118,11 +119,13 @@ class _ProfileViewState extends State<ProfileView> {
 
     final XFile? picked;
     try {
+      // Small on purpose: the photo is stored inside the user's Firestore
+      // document (see FirebaseService.uploadProfileImage).
       picked = await _picker.pickImage(
         source: source,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 80,
+        maxWidth: 320,
+        maxHeight: 320,
+        imageQuality: 70,
       );
     } on PlatformException {
       if (!mounted) return;
@@ -375,9 +378,7 @@ class _ProfileCard extends StatelessWidget {
                     CircleAvatar(
                       radius: 32,
                       backgroundColor: AppColors.surfaceMuted,
-                      foregroundImage: imageUrl.isEmpty
-                          ? null
-                          : NetworkImage(imageUrl),
+                      foregroundImage: profileImageProvider(imageUrl),
                       child: const Icon(
                         Icons.person,
                         size: 32,

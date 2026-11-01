@@ -6,6 +6,7 @@ import '../components/app_primary_button.dart';
 import '../components/insights_card.dart';
 import '../components/tracker_summary_card.dart';
 import '../components/fill_up_log_card.dart';
+import '../models/fill_up_log.dart';
 import '../models/fill_up_model.dart';
 import '../models/station_summary.dart';
 import '../ui/adaptive/app_dialog.dart';
@@ -14,6 +15,7 @@ import '../ui/adaptive/app_spinner.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import '../ui/adaptive/app_page_route.dart';
 import 'analytics_view.dart';
+import 'fill_up_detail_sheet.dart';
 import 'fill_up_form_sheet.dart';
 import 'station_history_sheet.dart';
 import '../ui/app_theme.dart';
@@ -26,10 +28,16 @@ class HomeView extends StatelessWidget {
   Future<void> _onAction(
     BuildContext context,
     FillUpViewModel vm,
-    FillUp fillUp,
+    FillUpLogEntry entry,
     FillUpAction action,
   ) async {
+    final fillUp = entry.fillUp;
     switch (action) {
+      case FillUpAction.view:
+        // The detail card comes first; editing is a choice made from it.
+        final next = await showFillUpDetail(context, entry);
+        if (next == null || !context.mounted) return;
+        await _onAction(context, vm, entry, next);
       case FillUpAction.edit:
         await showFillUpForm(context, editing: fillUp);
       case FillUpAction.delete:
@@ -124,12 +132,13 @@ class HomeView extends StatelessWidget {
                     itemCount: entries.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, i) {
-                      final fillUp = entries[i].fillUp;
+                      final entry = entries[i];
                       return FillUpLogCard(
-                        key: ValueKey(fillUp.id),
-                        entry: entries[i],
-                        onAction: (a) => _onAction(context, vm, fillUp, a),
-                        onStationTap: () => _openStation(context, vm, fillUp),
+                        key: ValueKey(entry.fillUp.id),
+                        entry: entry,
+                        onAction: (a) => _onAction(context, vm, entry, a),
+                        onStationTap: () =>
+                            _openStation(context, vm, entry.fillUp),
                       );
                     },
                   ),

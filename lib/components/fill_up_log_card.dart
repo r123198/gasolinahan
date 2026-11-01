@@ -10,17 +10,21 @@ import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
 import '../ui/tracker_format.dart';
 import 'brand_logo.dart';
+import 'fuel_pill.dart';
 
 const _tabular = [FontFeature.tabularFigures()];
 
 /// Below this, a price difference reads as "about your usual".
 const _samePriceThreshold = 0.10;
 
-enum FillUpAction { edit, delete }
+/// What the user wants to do with a fill-up: [view] opens its detail card
+/// (tapping the card), the others come from the card's menu or that view.
+enum FillUpAction { view, edit, delete }
 
 /// One fill-up in the Tracker log. The total paid leads; colour then sorts
 /// the rest by kind — indigo distance, teal fuel, green/amber for better or
 /// worse than the user's own average (always with an arrow and words).
+/// Tapping the card opens the read-only detail view, not the editor.
 class FillUpLogCard extends StatelessWidget {
   final FillUpLogEntry entry;
   final ValueChanged<FillUpAction> onAction;
@@ -60,7 +64,7 @@ class FillUpLogCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,
       child: AppTappable(
-        onTap: () => onAction(FillUpAction.edit),
+        onTap: () => onAction(FillUpAction.view),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 4, 16),
           child: Column(
@@ -155,7 +159,7 @@ class _Header extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        _FuelPill(
+                        FuelGradePill(
                           fuelType: fill.fuelType,
                           productName: fill.productName,
                         ),
@@ -190,43 +194,6 @@ class _Header extends StatelessWidget {
           onPressed: onMore,
         ),
       ],
-    );
-  }
-}
-
-/// Product (or grade) pill in the grade's PH pump colour: "XCS" in
-/// Regular blue, "Turbo Diesel" in Diesel green.
-class _FuelPill extends StatelessWidget {
-  final String fuelType;
-  final String? productName;
-
-  const _FuelPill({required this.fuelType, this.productName});
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color, tint) = switch (fuelType) {
-      'premium' => ('Premium', AppColors.fuelPremium, const Color(0xFFFEE2E2)),
-      'diesel' => ('Diesel', AppColors.fuelDiesel, AppColors.goTint),
-      _ => ('Regular', AppColors.fuelRegular, const Color(0xFFDBEAFE)),
-    };
-    final product = productName?.trim() ?? '';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: tint,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        product.isEmpty ? label : product,
-        semanticsLabel: product.isEmpty ? label : '$product, $label',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gasolinahan/components/map_bottom_controls.dart';
+import 'package:gasolinahan/components/track_me_button.dart';
 import 'package:gasolinahan/viewmodels/trip_viewmodel.dart';
 import 'package:provider/provider.dart';
 
@@ -8,9 +9,8 @@ import '../services/trip_viewmodel_test.dart'
     show FakeActivity, FakeConsent, FakeService, FakeSource;
 
 void main() {
-  testWidgets('tracking label fits beside the buttons on a 320px phone', (
-    tester,
-  ) async {
+  testWidgets('stacks search, report and my-location; hides Track me '
+      'on a 320px phone', (tester) async {
     tester.view.physicalSize = const Size(320 * 3, 640 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -27,6 +27,8 @@ void main() {
       await trips.trackNow();
     });
     expect(trips.isTracking, isTrue);
+    var searches = 0;
+    var reports = 0;
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -38,6 +40,8 @@ void main() {
               child: MapBottomControls(
                 stationCount: 12,
                 onShowStations: () {},
+                onSearch: () => searches++,
+                onReport: () => reports++,
                 onMyLocation: () {},
                 onTrackingStarted: () {},
               ),
@@ -48,8 +52,24 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.byTooltip('Trip history'), findsOneWidget);
+    expect(showTrackMeControl, isFalse);
+    expect(find.textContaining('Track'), findsNothing);
+    expect(find.byTooltip('Trip history'), findsNothing);
     expect(find.byTooltip('Go to my location'), findsOneWidget);
+    expect(find.text('Nearby stations'), findsOneWidget);
+
+    // The three round buttons sit in one column on the right.
+    final search = tester.getCenter(find.byTooltip('Search stations'));
+    final report = tester.getCenter(find.byTooltip('Report a price'));
+    final mine = tester.getCenter(find.byTooltip('Go to my location'));
+    expect(search.dx, closeTo(report.dx, 1));
+    expect(report.dx, closeTo(mine.dx, 1));
+    expect(search.dy < report.dy && report.dy < mine.dy, isTrue);
+
+    await tester.tap(find.byTooltip('Search stations'));
+    await tester.tap(find.byTooltip('Report a price'));
+    expect(searches, 1);
+    expect(reports, 1);
   });
 
   testWidgets('stopping tracking tells the map to stop following', (
@@ -73,15 +93,7 @@ void main() {
       ChangeNotifierProvider.value(
         value: trips,
         child: MaterialApp(
-          home: Scaffold(
-            body: MapBottomControls(
-              stationCount: 0,
-              onShowStations: () {},
-              onMyLocation: () {},
-              onTrackingStarted: () {},
-              onTrackingStopped: () => stopped++,
-            ),
-          ),
+          home: Scaffold(body: TrackMeButton(onStopped: () => stopped++)),
         ),
       ),
     );

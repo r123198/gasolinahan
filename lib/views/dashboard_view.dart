@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
@@ -8,25 +7,26 @@ import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
+import 'package:vector_map_tiles/vector_map_tiles.dart' show Style;
 import '../models/station_model.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
 import '../viewmodels/fill_up_nudge_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
 import 'fill_up_form_sheet.dart';
-import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_platform.dart';
 import '../ui/adaptive/app_toast.dart';
-import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
 import '../ui/map_style.dart';
-import '../components/brand_logo.dart';
 import '../components/map_bottom_controls.dart';
+import '../components/station_marker.dart';
+import '../services/current_location.dart';
 import '../services/geo.dart';
 import '../services/heading_stream.dart';
 import '../models/map_framing.dart';
 import 'nearby_stations_sheet.dart';
 import 'station_detail_sheet.dart';
+import 'station_search_view.dart';
 import 'home_view.dart';
 import 'profile_view.dart';
 import 'tracking_disclosure_sheet.dart';
@@ -48,8 +48,12 @@ const List<_NavTab> _tabs = [
   ),
 ];
 
-/// Zoom used when centering on the user.
+/// Zoom used when centering on the user while a trip is being followed.
 const _followZoom = 16.0;
+
+/// Street-level zoom used when the map opens on the user or they tap
+/// my-location: a few blocks, close enough to tell stations apart.
+const _closeZoom = 17.0;
 const _locationTimeout = Duration(seconds: 8);
 
 class DashboardView extends StatefulWidget {
@@ -85,6 +89,9 @@ class _DashboardViewState extends State<DashboardView> {
   final MapController _mapController = MapController();
   final Location _location = Location();
 
+  /// Fetched once; the map shows the vector basemap when it arrives.
+  late final Future<Style> _basemapStyle = readBasemapStyle();
+
   // Default center: Metro Manila (Makati area)
   static const _defaultCenter = LatLng(14.5648, 121.0453);
   static const _defaultZoom = 13.0;
@@ -93,16 +100,12 @@ class _DashboardViewState extends State<DashboardView> {
   double? _userLat;
   double? _userLng;
 
-  // Search
-  final TextEditingController _searchController = TextEditingController();
-
   @override
   void initState() {
     super.initState();
     _stationsVm = context.read<DashboardViewModel>();
     _fillUpsVm = context.read<FillUpViewModel>();
     _nudgesVm = context.read<FillUpNudgeViewModel>();
-    _searchController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<DashboardViewModel>().listenToStations();
       // Signed in by now: pull this account's fill-ups from the cloud.
@@ -125,7 +128,6 @@ class _DashboardViewState extends State<DashboardView> {
     _stationsVm.removeListener(_syncNudgeStations);
     _fillUpsVm.removeListener(_syncNudgeFillUps);
     _nudgesVm.removeListener(_openNudgedFillUp);
-    _searchController.dispose();
     _alignToUser.close();
     super.dispose();
   }
@@ -159,10 +161,16 @@ class _DashboardViewState extends State<DashboardView> {
     _frameStationsOnce();
   }
 
-  /// On first open, fit the reported stations in view (see [pointsToFrame])
-  /// once stations have loaded and the location lookup has finished.
+  /// On first open, once stations have loaded and the location lookup has
+  /// finished: with a fix the map stays close in on the user (see
+  /// [_lookUpInitialLocation]); without one it fits the reported stations
+  /// (see [pointsToFrame]) so it never opens on empty sea.
   void _frameStationsOnce() {
     if (_didFrameStations || !_locationResolved || _stationsVm.isLoading) {
+      return;
+    }
+    if (_userLat != null && _userLng != null) {
+      _didFrameStations = true;
       return;
     }
     final points = pointsToFrame(
@@ -182,8 +190,8 @@ class _DashboardViewState extends State<DashboardView> {
       _mapController.fitCamera(
         CameraFit.coordinates(
           coordinates: coords,
-          // Clear the search row on top and the controls at the bottom.
-          padding: const EdgeInsets.fromLTRB(48, 160, 48, 300),
+          // Clear the status bar on top and the controls at the bottom.
+          padding: const EdgeInsets.fromLTRB(48, 80, 48, 300),
           maxZoom: 15,
         ),
       );
@@ -255,25 +263,19 @@ class _DashboardViewState extends State<DashboardView> {
 
   Future<void> _lookUpInitialLocation() async {
     if (!await _ensureLocationAllowed()) return;
-
-    try {
-      final loc = await _location.getLocation().timeout(_locationTimeout);
-      if (loc.latitude != null && loc.longitude != null && mounted) {
-        setState(() {
-          _userLat = loc.latitude;
-          _userLng = loc.longitude;
-        });
-        _mapController.move(LatLng(loc.latitude!, loc.longitude!), 14.0);
-      }
-    } on TimeoutException {
-      debugPrint('Initial location lookup timed out');
-    } on PlatformException catch (e) {
-      debugPrint('Initial location lookup failed: ${e.code}');
+    // A recent cached fix centres the map at once; a fresh one refines it.
+    final cached = await readLastKnownLocation();
+    if (cached != null) _showUserAt(cached, zoom: _closeZoom);
+    final fix = await readCurrentLocation(timeout: _locationTimeout);
+    if (fix == null) {
+      debugPrint('Initial location lookup found no fix');
+      return;
     }
+    _showUserAt(fix, zoom: _closeZoom);
   }
 
-  /// Re-centres on the user. The location dot's own fix answers at once;
-  /// the plugin lookup (which can wait forever without a GPS fix) is capped.
+  /// Re-centres on the user: the cached fix answers at once, then a fresh
+  /// reading (capped, so a missing GPS fix can't leave the button hanging).
   Future<void> _goToMyLocation() async {
     if (!await _ensureLocationAllowed()) {
       if (mounted) {
@@ -281,30 +283,30 @@ class _DashboardViewState extends State<DashboardView> {
       }
       return;
     }
-    _alignToUser.add(15);
-    try {
-      final loc = await _location.getLocation().timeout(_locationTimeout);
-      final lat = loc.latitude;
-      final lng = loc.longitude;
-      if (lat == null || lng == null || !mounted) return;
-      setState(() {
-        _userLat = lat;
-        _userLng = lng;
-      });
-      _mapController.move(LatLng(lat, lng), 15.0);
-    } on TimeoutException {
-      if (mounted) {
-        showAppToast(
-          context,
-          "Can't find your location yet. Check that location is on.",
-        );
-      }
-    } on PlatformException catch (e) {
-      debugPrint('Location lookup failed: ${e.code}');
-      if (mounted) {
-        showAppToast(context, 'Allow location access to see where you are.');
-      }
+    _alignToUser.add(_closeZoom);
+    final cached = await readLastKnownLocation();
+    if (cached != null) _showUserAt(cached, zoom: _closeZoom);
+    final fix = await readCurrentLocation(timeout: _locationTimeout);
+    if (fix != null) {
+      _showUserAt(fix, zoom: _closeZoom);
+      return;
     }
+    if (cached == null && mounted) {
+      showAppToast(
+        context,
+        "Can't find your location yet. Check that location is on.",
+      );
+    }
+  }
+
+  /// Remembers where the user is (for distances) and moves the map there.
+  void _showUserAt(GeoFix fix, {required double zoom}) {
+    if (!mounted) return;
+    setState(() {
+      _userLat = fix.latitude;
+      _userLng = fix.longitude;
+    });
+    _mapController.move(LatLng(fix.latitude, fix.longitude), zoom);
   }
 
   void _onItemTapped(int index) {
@@ -324,6 +326,7 @@ class _DashboardViewState extends State<DashboardView> {
       userLat: _userLat,
       userLng: _userLng,
       onReport: () => Navigator.pushNamed(context, '/report'),
+      loadDetails: _stationsVm.loadDetails,
     );
   }
 
@@ -373,7 +376,7 @@ class _DashboardViewState extends State<DashboardView> {
       body: IndexedStack(
         index: _selectedIndex,
         // Each tab fills the body. Without this the map tab, a Stack of
-        // positioned layers, shrinks to its only sized child (the search row).
+        // positioned layers, shrinks to its only sized child.
         sizing: StackFit.expand,
         children: [
           const SafeArea(bottom: false, child: HomeView()),
@@ -410,31 +413,6 @@ class _DashboardViewState extends State<DashboardView> {
     return Stack(
       children: [
         Positioned.fill(child: _buildMap()),
-        SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Row(
-              children: [
-                Expanded(child: _buildSearchBar(context)),
-                const SizedBox(width: 12),
-                SizedBox(
-                  height: 48,
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.pushNamed(context, '/report'),
-                    icon: const Icon(Icons.photo_camera_outlined, size: 20),
-                    label: const Text('Report'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.ink,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
         Positioned(
           left: 0,
           right: 0,
@@ -443,6 +421,8 @@ class _DashboardViewState extends State<DashboardView> {
             builder: (context, vm, _) => MapBottomControls(
               stationCount: vm.visibleStations.length,
               onShowStations: _openNearbyStations,
+              onSearch: _openSearch,
+              onReport: () => Navigator.pushNamed(context, '/report'),
               onMyLocation: _goToMyLocation,
               onTrackingStarted: _startFollowingUser,
               onTrackingStopped: _stopFollowingUser,
@@ -466,17 +446,48 @@ class _DashboardViewState extends State<DashboardView> {
     setState(() => _followUser = false);
   }
 
-  Future<void> _openNearbyStations({String query = ''}) async {
-    FocusScope.of(context).unfocus();
+  Future<void> _openNearbyStations() async {
     final vm = context.read<DashboardViewModel>();
     final station = await showNearbyStationsSheet(
       context,
       cheapestId: _cheapestNearbyId(vm.nearbyStations, vm.fuelType),
       userLat: _userLat,
       userLng: _userLng,
-      query: query,
     );
     if (station != null && mounted) _showStationDetail(station);
+  }
+
+  /// Full-screen search over every reported station, nearest first.
+  Future<void> _openSearch() async {
+    final vm = context.read<DashboardViewModel>();
+    final station = await showStationSearch(
+      context,
+      stations: vm.nearbyStations,
+      fuelType: vm.fuelType,
+      userLat: _userLat,
+      userLng: _userLng,
+    );
+    if (station != null && mounted) _showStationDetail(station);
+  }
+
+  Marker _marker(StationModel s, {required double price, PriceTier? tier}) {
+    final size = stationMarkerSize(
+      hasPrice: tier != null,
+      isCheapest: tier == PriceTier.cheapest,
+    );
+    return Marker(
+      point: LatLng(s.latitude, s.longitude),
+      width: size.width,
+      height: size.height,
+      // The box sits above the point, so the pointer's tip marks it.
+      alignment: Alignment.topCenter,
+      child: StationMarker(
+        station: s,
+        price: price,
+        tier: tier,
+        onTap: () => _showStationDetail(s),
+      ),
+    );
   }
 
   Widget _buildMap() {
@@ -485,115 +496,32 @@ class _DashboardViewState extends State<DashboardView> {
         // Markers follow the "With prices" filter, like the list does.
         final stations = vm.visibleStations;
         final cheapestId = _cheapestNearbyId(stations, vm.fuelType);
-        final markers = stations.map((s) {
-          final price = switch (vm.fuelType) {
-            FuelType.regular => s.regularPrice,
-            FuelType.premium => s.premiumPrice,
-            FuelType.diesel => s.dieselPrice,
-          };
-          final isCheapest = s.id == cheapestId;
-          // Black and white: white pills, the cheapest one inverted.
-          final markerColor = isCheapest ? AppColors.ink : Colors.white;
-          final borderColor = isCheapest ? AppColors.ink : AppColors.divider;
-          final textColor = isCheapest ? Colors.white : AppColors.ink;
-          return Marker(
-            point: LatLng(s.latitude, s.longitude),
-            width: 170,
-            height: isCheapest ? 86 : 68,
-            // The box sits above the point, so the pointer's tip marks it.
-            alignment: Alignment.topCenter,
-            child: Semantics(
-              button: true,
-              label:
-                  '${s.displayName}, ${formatPricePerLiter(price)}'
-                  '${isCheapest ? ', cheapest nearby' : ''}',
-              excludeSemantics: true,
-              onTap: () => _showStationDetail(s),
-              child: GestureDetector(
-                onTap: () => _showStationDetail(s),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (isCheapest)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppColors.ink),
-                        ),
-                        child: const Text(
-                          'Cheapest',
-                          style: TextStyle(
-                            color: AppColors.ink,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
-                      decoration: BoxDecoration(
-                        color: markerColor,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: borderColor),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x29000000),
-                            blurRadius: 12,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 24,
-                            height: 24,
-                            padding: const EdgeInsets.all(3),
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                            ),
-                            child: brandLogoWidget(
-                              s.brand,
-                              18,
-                              stationName: s.name,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            formatPricePerLiter(price),
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Triangle pointer
-                    CustomPaint(
-                      size: const Size(14, 8),
-                      painter: _TrianglePainter(
-                        color: markerColor,
-                        borderColor: borderColor,
-                      ),
-                    ),
-                  ],
-                ),
+        double priceOf(StationModel s) => switch (vm.fuelType) {
+          FuelType.regular => s.regularPrice,
+          FuelType.premium => s.premiumPrice,
+          FuelType.diesel => s.dieselPrice,
+        };
+        // Price tiers are coloured against the cheapest price on the map.
+        final priced = [
+          for (final s in stations)
+            if (priceOf(s) > 0) priceOf(s),
+        ];
+        final cheapest = priced.isEmpty
+            ? 0.0
+            : priced.reduce((a, b) => a < b ? a : b);
+        final markers = [
+          for (final s in stations)
+            if (s.isPlaced)
+              _marker(
+                s,
+                price: priceOf(s),
+                tier: priceOf(s) <= 0
+                    ? null
+                    : s.id == cheapestId
+                    ? PriceTier.cheapest
+                    : priceTierOf(priceOf(s), cheapest),
               ),
-            ),
-          );
-        }).toList();
+        ];
 
         return FlutterMap(
           mapController: _mapController,
@@ -619,12 +547,9 @@ class _DashboardViewState extends State<DashboardView> {
             ),
           ),
           children: [
-            // Official OpenStreetMap tiles: free, no API key.
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.maalam.gasolinahan',
-              tileBuilder: monochromeTileBuilder,
-            ),
+            // See map_style.dart: OpenFreeMap Positron, or plain OSM tiles
+            // if the style can't be fetched.
+            FutureBuilder<Style>(future: _basemapStyle, builder: basemapLayer),
             // OSM credit is shown under the map controls instead of the
             // corner widget, which the floating nav bar would cover.
             CurrentLocationLayer(
@@ -670,65 +595,6 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context) {
-    if (isCupertino(context)) return _buildCupertinoSearchBar(context);
-    return TextField(
-      controller: _searchController,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: 'Search station, brand, area',
-        prefixIcon: const Icon(Icons.search),
-        suffixIcon: _searchController.text.isNotEmpty
-            ? AppIconButton(
-                onPressed: () {
-                  _searchController.clear();
-                  FocusScope.of(context).unfocus();
-                },
-                icon: const Icon(Icons.close),
-                tooltip: 'Clear',
-              )
-            : null,
-      ),
-      onSubmitted: (q) => _openNearbyStations(query: q),
-    );
-  }
-
-  Widget _buildCupertinoSearchBar(BuildContext context) {
-    return CupertinoTextField(
-      controller: _searchController,
-      textInputAction: TextInputAction.search,
-      placeholder: 'Search station, brand, area',
-      placeholderStyle: TextStyle(
-        fontFamily: AppTheme.fontFamily,
-        color: AppColors.textMuted,
-      ),
-      style: TextStyle(
-        fontFamily: AppTheme.fontFamily,
-        color: Theme.of(context).colorScheme.onSurface,
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      prefix: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12),
-        child: Icon(Icons.search, color: AppColors.textMuted),
-      ),
-      suffix: _searchController.text.isNotEmpty
-          ? AppIconButton(
-              onPressed: () {
-                _searchController.clear();
-                FocusScope.of(context).unfocus();
-              },
-              icon: const Icon(Icons.close, color: AppColors.textMuted),
-              tooltip: 'Clear',
-            )
-          : null,
-      onSubmitted: (q) => _openNearbyStations(query: q),
-    );
-  }
-
   Widget _buildCupertinoTabBar(ColorScheme scheme) {
     return CupertinoTabBar(
       currentIndex: _selectedIndex,
@@ -747,35 +613,4 @@ class _DashboardViewState extends State<DashboardView> {
       ],
     );
   }
-}
-
-/// Paints a small triangle pointer below the marker bubble
-class _TrianglePainter extends CustomPainter {
-  final Color color;
-  final Color borderColor;
-
-  _TrianglePainter({required this.color, required this.borderColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = ui.Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..lineTo(size.width, 0)
-      ..close();
-
-    // Fill
-    canvas.drawPath(path, Paint()..color = color);
-    // Border
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = borderColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

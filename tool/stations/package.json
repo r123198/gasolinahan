@@ -1,0 +1,13 @@
+{
+  "name": "gasolinahan-station-import",
+  "private": true,
+  "type": "module",
+  "description": "Imports the Google Places station export into Firestore",
+  "scripts": {
+    "dry-run": "node import_stations.mjs --dry-run",
+    "import": "node import_stations.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

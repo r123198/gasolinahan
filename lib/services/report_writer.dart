@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../models/report_upload.dart';
+import '../models/station_directory.dart';
 
 /// True when the phone has some network (it may still not reach Firebase).
 Future<bool> hasNetwork() async {
@@ -55,7 +56,26 @@ class ReportWriter {
       ..set(stationRef, {
         ...r.stationFields(stationExists: stationExists),
         'lastUpdated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true))
+      // The map reads prices from the directory document, so it gets the
+      // same prices in the same batch.
+      ..set(
+        _firestore.collection(directoryCollection).doc(directoryDocId),
+        directoryPriceUpdate(
+          stationId: r.stationId,
+          stationExists: stationExists,
+          regularPrice: r.regularPrice,
+          premiumPrice: r.premiumPrice,
+          dieselPrice: r.dieselPrice,
+          productPrices: r.productPrices,
+          name: r.stationName,
+          brand: r.brand,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          lastUpdated: FieldValue.serverTimestamp(),
+        ),
+        SetOptions(merge: true),
+      );
 
     final userRef = _firestore.collection('users').doc(r.userId);
     final points = r.awardedPoints;

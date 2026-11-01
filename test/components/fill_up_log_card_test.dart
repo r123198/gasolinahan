@@ -68,9 +68,8 @@ void main() {
     expect(find.textContaining('+'), findsNothing);
   });
 
-  testWidgets('tapping the card opens edit; the station row opens history', (
-    tester,
-  ) async {
+  testWidgets('tapping the card opens the detail view, not the editor; '
+      'the station row opens history', (tester) async {
     FillUpAction? action;
     var stationTaps = 0;
     await pump(
@@ -80,7 +79,7 @@ void main() {
       onStationTap: () => stationTaps++,
     );
     await tester.tap(find.text('₱755.47'));
-    expect(action, FillUpAction.edit);
+    expect(action, FillUpAction.view);
     await tester.tap(find.text('SeaOil Mayapa'));
     expect(stationTaps, 1);
   });

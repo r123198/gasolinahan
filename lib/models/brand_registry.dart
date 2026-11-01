@@ -87,6 +87,7 @@ class BrandRegistry {
   static const _green = Color(0xFF16A34A);
 
   static const _logoDir = 'assets/images/logos';
+  static const _markDir = 'assets/images/brand_marks';
 
   static final List<BrandInfo> brands = [
     BrandInfo(
@@ -369,6 +370,284 @@ class BrandRegistry {
         ),
       ],
     ),
+    // Brands from the Northern Mindanao import. Emblem only so far (no
+    // full logo): logoPath points straight at the mark.
+    BrandInfo(
+      name: 'Blu Energy',
+      color: const Color(0xFF1D4ED8),
+      logoPath: '$_markDir/blu-energy.jpeg',
+      ocrKeywords: ['blu energy', 'bluenergy'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Velox',
+      color: const Color(0xFF0F766E),
+      logoPath: '$_markDir/velox.jpeg',
+      ocrKeywords: ['velox'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'RM C Petrol',
+      color: const Color(0xFF9A3412),
+      logoPath: '$_markDir/rmc-petrol.jpeg',
+      ocrKeywords: ['rm c petrol', 'rmc petrol'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Mobil',
+      color: const Color(0xFFB91C1C),
+      logoPath: '$_markDir/mobil.jpeg',
+      ocrKeywords: ['mobil'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Petronas',
+      color: const Color(0xFF0D9488),
+      logoPath: '$_markDir/petronas.jpeg',
+      ocrKeywords: ['petronas', 'primax'],
+      products: [
+        FuelProduct(
+          name: 'Primax 95',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Primax 97',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Dynamic Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Aiji',
+      color: const Color(0xFF4D7C0F),
+      logoPath: '$_markDir/aiji.jpeg',
+      ocrKeywords: ['aiji'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Apex',
+      color: const Color(0xFF1E3A8A),
+      logoPath: '$_markDir/apex.png',
+      ocrKeywords: ['apex'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Eco Oil',
+      color: const Color(0xFF15803D),
+      logoPath: '$_markDir/eco_oil.jpeg',
+      ocrKeywords: ['eco oil', 'ecooil'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Insular Oil',
+      color: const Color(0xFF6D28D9),
+      logoPath: '$_markDir/insular_oil.jpeg',
+      ocrKeywords: ['insular oil', 'petro de oro'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Fuel Master',
+      color: const Color(0xFFB45309),
+      logoPath: '$_markDir/fuel_master.png',
+      ocrKeywords: ['fuel master', 'fuelmaster'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'TecFuel',
+      color: const Color(0xFF0369A1),
+      logoPath: '$_markDir/tecfuel.jpeg',
+      ocrKeywords: ['tecfuel', 'tec fuel'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
+    BrandInfo(
+      name: 'Quantum',
+      color: const Color(0xFF7E22CE),
+      logoPath: '$_markDir/quantum.webp',
+      ocrKeywords: ['quantum'],
+      products: [
+        FuelProduct(
+          name: 'Unleaded',
+          category: FuelCategory.regular,
+          color: _blue,
+        ),
+        FuelProduct(
+          name: 'Premium',
+          category: FuelCategory.premium,
+          color: _red,
+        ),
+        FuelProduct(
+          name: 'Diesel',
+          category: FuelCategory.diesel,
+          color: _green,
+        ),
+      ],
+    ),
   ];
 
   /// Find a brand by name (case-insensitive)
@@ -386,6 +665,12 @@ class BrandRegistry {
     'Unioil': ['uni oil'],
     'Flying V': ['flyingv', 'flying-v'],
     'Cleanfuel': ['clean fuel'],
+    'Blu Energy': ['blu', 'bluenergy'],
+    'RM C Petrol': ['rmc', 'rm-c', 'rmc petrol'],
+    'Eco Oil': ['ecooil'],
+    'Insular Oil': ['insular', 'petro de oro'],
+    'Fuel Master': ['fuelmaster'],
+    'TecFuel': ['tec fuel'],
   };
 
   /// Other spellings of [brand] people type, lower-case.

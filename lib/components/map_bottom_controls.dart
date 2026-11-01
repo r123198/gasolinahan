@@ -3,18 +3,26 @@ import 'package:flutter/material.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_tappable.dart';
 import '../ui/app_theme.dart';
+import '../ui/map_style.dart';
 import 'track_me_button.dart';
 
 const _shadow = [
   BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 4)),
 ];
 
-/// Controls along the bottom of the map, above the nav bar: Track me and
-/// my-location on one row, the "Nearby stations" bar below, then the map
-/// data credit OpenStreetMap requires.
+/// Manual "Track me" is hidden for now; trips still start on their own when
+/// driving is detected. Flip this to bring the pill back.
+const showTrackMeControl = false;
+
+/// Controls along the bottom of the map, above the nav bar: a column of
+/// round buttons on the right (search, report a price, my location, with
+/// Track me on the left when shown), the "Nearby stations" bar below,
+/// then the map credits OpenStreetMap and OpenFreeMap ask for.
 class MapBottomControls extends StatelessWidget {
   final int stationCount;
   final VoidCallback onShowStations;
+  final VoidCallback onSearch;
+  final VoidCallback onReport;
   final VoidCallback onMyLocation;
   final VoidCallback onTrackingStarted;
   final VoidCallback? onTrackingStopped;
@@ -23,6 +31,8 @@ class MapBottomControls extends StatelessWidget {
     super.key,
     required this.stationCount,
     required this.onShowStations,
+    required this.onSearch,
+    required this.onReport,
     required this.onMyLocation,
     required this.onTrackingStarted,
     this.onTrackingStopped,
@@ -39,33 +49,43 @@ class MapBottomControls extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: TrackMeButton(
-                    onStarted: onTrackingStarted,
-                    onStopped: onTrackingStopped,
-                  ),
+                  child: showTrackMeControl
+                      ? TrackMeButton(
+                          onStarted: onTrackingStarted,
+                          onStopped: onTrackingStopped,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
               const SizedBox(width: 12),
-              DecoratedBox(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: _shadow,
-                ),
-                child: AppIconButton(
-                  tooltip: 'Go to my location',
-                  padding: const EdgeInsets.all(14),
-                  icon: const Icon(
-                    Icons.my_location,
-                    size: 24,
-                    color: AppColors.ink,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _RoundButton(
+                    tooltip: 'Search stations',
+                    icon: Icons.search,
+                    onPressed: onSearch,
                   ),
-                  onPressed: onMyLocation,
-                ),
+                  const SizedBox(height: 10),
+                  // The one action that adds data stands out in ink.
+                  _RoundButton(
+                    tooltip: 'Report a price',
+                    icon: Icons.photo_camera_outlined,
+                    onPressed: onReport,
+                    dark: true,
+                  ),
+                  const SizedBox(height: 10),
+                  _RoundButton(
+                    tooltip: 'Go to my location',
+                    icon: Icons.my_location,
+                    onPressed: onMyLocation,
+                  ),
+                ],
               ),
             ],
           ),
@@ -74,11 +94,42 @@ class MapBottomControls extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.only(top: 4, left: 4),
             child: Text(
-              '© OpenStreetMap contributors',
+              basemapCredit,
               style: TextStyle(fontSize: 11, color: AppColors.textMuted),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RoundButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool dark;
+
+  const _RoundButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.dark = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: dark ? AppColors.ink : Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: _shadow,
+      ),
+      child: AppIconButton(
+        tooltip: tooltip,
+        padding: const EdgeInsets.all(14),
+        icon: Icon(icon, size: 24, color: dark ? Colors.white : AppColors.ink),
+        onPressed: onPressed,
       ),
     );
   }

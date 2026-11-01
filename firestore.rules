@@ -32,6 +32,13 @@ service cloud.firestore {
       }
     }
 
+    // Every station in one document, for a single-read map. Imported by
+    // tool/stations (admin); reports merge their prices into it.
+    match /directory/{docId} {
+      allow read, update: if isSignedIn();
+      allow create, delete: if false;
+    }
+
     // Crowdsourced prices: anyone signed in can read and contribute.
     match /stations/{stationId} {
       allow read: if isSignedIn();

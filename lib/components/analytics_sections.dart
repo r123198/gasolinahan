@@ -10,6 +10,46 @@ import 'brand_logo.dart';
 
 const _tabular = [FontFeature.tabularFigures()];
 
+/// Heading for a group of sections (Spending, Driving, Efficiency…): the
+/// screen's second level, above the cards' own titles.
+class AnalyticsHeading extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+
+  const AnalyticsHeading({super.key, required this.title, this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.4,
+                color: AppColors.text,
+              ),
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle!,
+              style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// White rounded section with a title and a one-line "what this tells you".
 class AnalyticsSection extends StatelessWidget {
   final String title;
@@ -229,9 +269,24 @@ class _BrandRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Flexible(
-                      child: Text(
-                        p.brand,
+                    // One run of text, so the name and its "Best" tag
+                    // trim together; the figure never wraps.
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          text: p.brand,
+                          children: [
+                            if (isBest)
+                              const TextSpan(
+                                text: '  Best',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.good,
+                                ),
+                              ),
+                          ],
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -240,19 +295,7 @@ class _BrandRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (isBest) ...[
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Best',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.good,
-                        ),
-                      ),
-                    ],
                     const SizedBox(width: 8),
-                    const Spacer(),
                     Text(
                       '${p.kmPerLiter.toStringAsFixed(1)} km/L',
                       style: const TextStyle(

@@ -1,0 +1,98 @@
+{
+ "stations": {
+  "ChIJgRqEywqfVTIReNDbWvqhB9E": {
+   "n": "Soti Fuel Station - Baloi Branch",
+   "b": "",
+   "c": "Baloi",
+   "a": "Ma. Cristina, Baloi, Lanao del Norte, Philippines",
+   "la": 8.1604778,
+   "lo": 124.2037268,
+   "am": {
+    "rr": 1,
+    "cw": 1
+   },
+   "rt": 4.6,
+   "rv": 5
+  },
+  "ChIJrQ0cQUWL_zIR8TVr17VSsEs": {
+   "n": "Aiji Fuel",
+   "b": "Aiji",
+   "c": "Cagayan de Oro City",
+   "a": "FH8M+8WP, Pagatpat Road, Cagayan De Oro City, Misamis Oriental, Philippines",
+   "la": 8.4658394,
+   "lo": 124.5848269,
+   "am": {
+    "rr": 1,
+    "cw": 1,
+    "h24": 0
+   },
+   "rt": 4,
+   "rv": 2
+  },
+  "ChIJv5eySFuL_zIRSwYmJLfIqlQ": {
+   "n": "Aiji Fuel Station",
+   "b": "Aiji",
+   "c": "Cagayan de Oro City",
+   "a": "Zone-7, Fatima Subdivision, Cagayan De Oro City, 9000 Misamis Oriental, Philippines",
+   "la": 8.4505176,
+   "lo": 124.5832928,
+   "am": {
+    "rr": 1,
+    "cw": 1,
+    "h24": 0
+   }
+  },
+  "ChIJARY8sQDz_zIRnz-YEsIM3ww": {
+   "n": "Apex",
+   "b": "Apex",
+   "c": "Cagayan de Oro City",
+   "a": "GJ4P+WMM, San Restituto St, Cagayan De Oro City, Misamis Oriental, Philippines",
+   "la": 8.5073364,
+   "lo": 124.6366756,
+   "am": {
+    "rr": 1,
+    "wr": 1,
+    "cw": 1
+   },
+   "rt": 5,
+   "rv": 4
+  },
+  "ChIJUzdH7CHt_zIRYwtSMM3XhyI": {
+   "n": "Apex Fuel Station",
+   "b": "Apex",
+   "c": "Cagayan de Oro City",
+   "a": "FPHG+R4C, Cagayan De Oro City, 9000 Misamis Oriental, Philippines",
+   "la": 8.479553,
+   "lo": 124.7252753,
+   "am": {
+    "rr": 1,
+    "wr": 1,
+    "cs": 1,
+    "cw": 1,
+    "cc": 1,
+    "h24": 0
+   },
+   "rt": 4.1,
+   "rv": 19,
+   "ns": "7-Eleven (4814) GMC Tablon CDO"
+  },
+  "ChIJ5xzuruLy_zIR9Tl-1Z3kpJ0": {
+   "n": "Blu Energy",
+   "b": "Blu Energy",
+   "c": "Cagayan de Oro City",
+   "a": "Blue energy, Masterson Ave, Cagayan De Oro City, Misamis Oriental, Philippines",
+   "la": 8.4544682,
+   "lo": 124.6237168,
+   "am": {
+    "rr": 1,
+    "wr": 1,
+    "ap": 1,
+    "cw": 1,
+    "cc": 1,
+    "h24": 1
+   },
+   "rt": 4.2,
+   "rv": 51
+  }
+ }
+}
