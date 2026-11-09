@@ -1,0 +1,13 @@
+{
+  "name": "gasolinahan-rules-test",
+  "private": true,
+  "type": "module",
+  "description": "Runs firestore.rules against the local Firestore emulator",
+  "scripts": {
+    "test": "firebase emulators:exec --config ../../firebase.json --project demo-gasolinahan --only firestore 'node --test rules.test.mjs'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.0.0"
+  }
+}

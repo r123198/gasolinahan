@@ -14,6 +14,9 @@ const _nominatimUrl = 'https://nominatim.openstreetmap.org/reverse';
 const _userAgent = 'Gasolinahan/1.0 (com.maalam.gasolinahan)';
 const _timeout = Duration(seconds: 8);
 
+/// Browsers send their own User-Agent and refuse to let pages replace it.
+const _headers = kIsWeb ? null : {'User-Agent': _userAgent};
+
 /// How close a mapped station must be to count as "the one you're at".
 const fuelStationRadiusMeters = 200;
 
@@ -127,7 +130,7 @@ class PlaceLookup {
     final json = await _getJson(
       _client.post(
         Uri.parse(_overpassUrl),
-        headers: {'User-Agent': _userAgent},
+        headers: _headers,
         body: {'data': query},
       ),
     );
@@ -144,9 +147,7 @@ class PlaceLookup {
         'addressdetails': '1',
       },
     );
-    final json = await _getJson(
-      _client.get(uri, headers: {'User-Agent': _userAgent}),
-    );
+    final json = await _getJson(_client.get(uri, headers: _headers));
     return json == null ? null : areaName(json);
   }
 

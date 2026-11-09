@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,7 @@ import '../components/app_logo.dart';
 import '../components/points_tier_card.dart';
 import '../components/app_section_header.dart';
 import '../components/app_stat_card.dart';
+import '../models/app_access.dart';
 import '../models/report_model.dart';
 import '../models/user_model.dart';
 import '../services/firebase_service.dart';
@@ -139,7 +141,7 @@ class _ProfileViewState extends State<ProfileView> {
     }
     if (picked == null || !mounted) return;
     final auth = context.read<AuthViewModel>();
-    await auth.updateProfileImage(picked.path);
+    await auth.updateProfileImage(picked);
     if (!mounted) return;
     final error = auth.errorMessage;
     showAppToast(context, error ?? 'Profile photo updated');
@@ -168,7 +170,7 @@ class _ProfileViewState extends State<ProfileView> {
     Navigator.of(
       context,
       rootNavigator: true,
-    ).pushNamedAndRemoveUntil('/login', (_) => false);
+    ).pushNamedAndRemoveUntil(routeAfterSignOut(isWeb: kIsWeb), (_) => false);
   }
 
   Future<void> _deleteAccount() async {
@@ -185,7 +187,7 @@ class _ProfileViewState extends State<ProfileView> {
     Navigator.of(
       context,
       rootNavigator: true,
-    ).pushNamedAndRemoveUntil('/login', (_) => false);
+    ).pushNamedAndRemoveUntil(routeAfterSignOut(isWeb: kIsWeb), (_) => false);
   }
 
   void _push(Widget page) =>
@@ -261,7 +263,8 @@ class _ProfileViewState extends State<ProfileView> {
           _Card(
             child: Column(
               children: [
-                const _AutoTrackingTile(),
+                // Browsers can't record trips in the background.
+                if (!kIsWeb) const _AutoTrackingTile(),
                 AppListTile(
                   icon: Icons.shield_outlined,
                   title: 'Privacy & security',

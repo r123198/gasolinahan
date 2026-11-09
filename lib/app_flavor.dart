@@ -24,6 +24,11 @@ Flavor flavorFrom(String? name) => switch (name) {
   _ => throw ArgumentError.value(name, 'flavor', 'Expected dev or prod'),
 };
 
+/// Only the production Firebase project has a web app, so the web is always
+/// prod, even from `flutter run -d chrome` (see docs/web.md).
+Flavor flavorForBuild(String? name, {required bool isWeb}) =>
+    isWeb ? Flavor.prod : flavorFrom(name);
+
 FirebaseOptions firebaseOptionsFor(Flavor flavor) => switch (flavor) {
   Flavor.dev => dev.DefaultFirebaseOptions.currentPlatform,
   Flavor.prod => prod.DefaultFirebaseOptions.currentPlatform,

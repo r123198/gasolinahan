@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../models/fill_up_log.dart';
@@ -8,6 +6,7 @@ import '../ui/adaptive/app_sheet.dart';
 import '../ui/adaptive/app_tappable.dart';
 import '../ui/app_format.dart';
 import '../ui/app_theme.dart';
+import '../ui/device_photo.dart';
 import '../ui/tracker_format.dart';
 import 'brand_logo.dart';
 import 'fuel_pill.dart';
@@ -557,11 +556,11 @@ Future<void> showFillUpPhotos(BuildContext context, List<String> paths) {
           children: [
             for (final path in paths)
               InteractiveViewer(
-                child: Image.file(
-                  File(path),
+                child: devicePhoto(
+                  path,
                   fit: BoxFit.contain,
                   semanticLabel: 'Fill-up photo',
-                  errorBuilder: (_, _, _) => const Center(
+                  placeholder: (_) => const Center(
                     child: Text(
                       'Photo no longer available',
                       style: TextStyle(color: Colors.white),

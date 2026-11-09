@@ -4,6 +4,32 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:geolocator/geolocator.dart';
 
+/// True when the browser already allows location, without prompting.
+Future<bool> isLocationAllowedInBrowser() async {
+  final permission = await Geolocator.checkPermission();
+  return permission == LocationPermission.whileInUse ||
+      permission == LocationPermission.always;
+}
+
+/// Shows the browser's location prompt if needed. True when allowed.
+/// (The `location` plugin's permission check doesn't work in browsers.)
+Future<bool> askBrowserForLocation() async {
+  if (await isLocationAllowedInBrowser()) return true;
+  try {
+    final permission = await Geolocator.requestPermission().timeout(
+      _browserPromptTimeout,
+    );
+    return permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always;
+  } on TimeoutException {
+    debugPrint('The browser did not answer the location request');
+    return false;
+  }
+}
+
+/// Browsers can leave a location request unanswered indefinitely.
+const _browserPromptTimeout = Duration(seconds: 30);
+
 /// A fresh fix is this old at most; anything older is only a fallback.
 const _freshFixAge = Duration(minutes: 2);
 const _defaultTimeout = Duration(seconds: 10);
@@ -48,16 +74,22 @@ Future<GeoFix?> readCurrentLocation({
     if (!await Geolocator.isLocationServiceEnabled()) return null;
 
     try {
+      // The extra timeout is for the web, where geolocator misreads timeLimit
+      // as hours; on the phones both fire together.
       final position = await Geolocator.getCurrentPosition(
         locationSettings: LocationSettings(
           accuracy: LocationAccuracy.high,
           timeLimit: timeout,
         ),
-      );
+      ).timeout(timeout);
       return _toFix(position);
     } on TimeoutException {
       debugPrint('Current location timed out; trying the last known fix');
     } on LocationServiceDisabledException {
+      return null;
+    } on PositionUpdateException catch (e) {
+      // How browsers report having no position available.
+      debugPrint('Current location unavailable: ${e.message}');
       return null;
     }
     return readLastKnownLocation(maxAge: null);
@@ -72,6 +104,8 @@ Future<GeoFix?> readCurrentLocation({
 /// The phone's cached fix, instantly. Null when there is none, or it is
 /// older than [maxAge] (null = any age).
 Future<GeoFix?> readLastKnownLocation({Duration? maxAge = _freshFixAge}) async {
+  // Browsers keep no last fix; geolocator throws UnsupportedError if asked.
+  if (kIsWeb) return null;
   try {
     final position = await Geolocator.getLastKnownPosition();
     if (position == null) return null;

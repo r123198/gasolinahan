@@ -22,7 +22,9 @@ class MapBottomControls extends StatelessWidget {
   final int stationCount;
   final VoidCallback onShowStations;
   final VoidCallback onSearch;
-  final VoidCallback onReport;
+
+  /// Null where the map is read-only (the web): the button isn't shown.
+  final VoidCallback? onReport;
   final VoidCallback onMyLocation;
   final VoidCallback onTrackingStarted;
   final VoidCallback? onTrackingStopped;
@@ -32,7 +34,7 @@ class MapBottomControls extends StatelessWidget {
     required this.stationCount,
     required this.onShowStations,
     required this.onSearch,
-    required this.onReport,
+    this.onReport,
     required this.onMyLocation,
     required this.onTrackingStarted,
     this.onTrackingStopped,
@@ -71,14 +73,16 @@ class MapBottomControls extends StatelessWidget {
                     icon: Icons.search,
                     onPressed: onSearch,
                   ),
-                  const SizedBox(height: 10),
-                  // The one action that adds data stands out in ink.
-                  _RoundButton(
-                    tooltip: 'Report a price',
-                    icon: Icons.photo_camera_outlined,
-                    onPressed: onReport,
-                    dark: true,
-                  ),
+                  if (onReport case final report?) ...[
+                    const SizedBox(height: 10),
+                    // The one action that adds data stands out in ink.
+                    _RoundButton(
+                      tooltip: 'Report a price',
+                      icon: Icons.photo_camera_outlined,
+                      onPressed: report,
+                      dark: true,
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   _RoundButton(
                     tooltip: 'Go to my location',

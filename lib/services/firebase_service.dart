@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'dart:io';
 import '../models/user_model.dart';
 import '../models/station_model.dart';
 import '../models/station_directory.dart';
@@ -33,12 +32,20 @@ class FirebaseService {
   /// Sending a report gives up after this and queues it offline instead.
   static const _submitTimeout = Duration(seconds: 15);
 
+  /// A saved session that never loads must not hold up the app.
+  static const _sessionRestoreTimeout = Duration(seconds: 5);
+
   /// A sign-up's profile write gives up after this (the account exists).
   static const _profileTimeout = Duration(seconds: 10);
 
   // ── Auth ──────────────────────────────────────────────
 
   User? get currentAuthUser => _auth.currentUser;
+
+  /// Waits for a saved session to load. Browsers load it asynchronously, so
+  /// until now [currentAuthUser] is null even for someone signed in.
+  Future<void> restoreSession() =>
+      _auth.authStateChanges().first.timeout(_sessionRestoreTimeout);
 
   Future<UserModel> signIn(String email, String password) async {
     final credential = await _auth.signInWithEmailAndPassword(
@@ -192,6 +199,9 @@ class FirebaseService {
   }
 
   Future<void> _deleteProfileImage(String uid) async {
+    // Web accounts only ever store photos in the profile itself. With no
+    // bucket, the browser request fails CORS and retries for minutes.
+    if (kIsWeb) return;
     try {
       await _profileImageRef(uid).delete();
     } on FirebaseException catch (e) {
@@ -319,9 +329,8 @@ class FirebaseService {
 
   /// Saves a (small) profile photo inside the user's document as a data
   /// URL and returns it. The project has no Storage bucket, so the photo
-  /// can't be uploaded as a file; [imageFile] must already be resized.
-  Future<String> uploadProfileImage(String userId, File imageFile) async {
-    final bytes = await imageFile.readAsBytes();
+  /// can't be uploaded as a file; [bytes] must already be resized.
+  Future<String> uploadProfileImage(String userId, Uint8List bytes) async {
     final url = encodeImageDataUrl(bytes);
     await _firestore.collection('users').doc(userId).set({
       'profileImageUrl': url,

@@ -5,6 +5,94 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Report checks. These stop vandalism, not a believable wrong price, and
+    // rules can't loop, so the prices inside a products map aren't checked.
+    // Keep in step with ReportWriter: a report rejected here stays queued on
+    // the phone and never reaches the map. Tests: tool/rules_test.
+    function isValidPrice(price) {
+      return price is number && price >= 30 && price <= 150;
+    }
+
+    function isValidProducts(products) {
+      return products is map && products.size() <= 40;
+    }
+
+    // The prices named in changed are valid. Prices nobody touched aren't
+    // rechecked, so an old value can't block new reports for a station.
+    function hasValidPrices(data, changed, regular, premium, diesel, products) {
+      return (!changed.hasAny([regular]) || isValidPrice(data[regular]))
+          && (!changed.hasAny([premium]) || isValidPrice(data[premium]))
+          && (!changed.hasAny([diesel]) || isValidPrice(data[diesel]))
+          && (!changed.hasAny([products]) || isValidProducts(data[products]));
+    }
+
+    // What a report may say about a station it's the first to describe. The
+    // name, brand and position are optional because the app only sends those
+    // it knows. The defaults below just stand in for a missing value.
+    function hasValidPlace(data, name, brand, latitude, longitude) {
+      let placeName = data.get(name, '');
+      let placeBrand = data.get(brand, '');
+      let lat = data.get(latitude, 12.0);
+      let lng = data.get(longitude, 122.0);
+      return placeName is string && placeName.size() <= 200
+          && placeBrand is string && placeBrand.size() <= 100
+          && lat is number && lat >= 4 && lat <= 22
+          && lng is number && lng >= 116 && lng <= 128;
+    }
+
+    function isValidStationUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['regularPrice', 'premiumPrice', 'dieselPrice',
+                              'productPrices', 'lastUpdated'])
+          && request.resource.data.lastUpdated == request.time
+          && hasValidPrices(request.resource.data, changed, 'regularPrice',
+                            'premiumPrice', 'dieselPrice', 'productPrices');
+    }
+
+    function isValidStationCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['regularPrice', 'premiumPrice', 'dieselPrice',
+                                  'productPrices', 'lastUpdated', 'name',
+                                  'brand', 'latitude', 'longitude'])
+          && data.lastUpdated == request.time
+          && hasValidPrices(data, data.keys().toSet(), 'regularPrice',
+                            'premiumPrice', 'dieselPrice', 'productPrices')
+          && hasValidPlace(data, 'name', 'brand', 'latitude', 'longitude');
+    }
+
+    function isValidKnownEntry(before, after) {
+      let changed = after.diff(before).affectedKeys();
+      return changed.hasOnly(['r', 'p', 'd', 'pp', 'u'])
+          && after.u == request.time
+          && hasValidPrices(after, changed, 'r', 'p', 'd', 'pp');
+    }
+
+    function isValidNewEntry(id, entry) {
+      return id.size() <= 200
+          && resource.data.stations.size() < 2000
+          && entry.keys().hasOnly(['r', 'p', 'd', 'pp', 'u', 'n', 'b', 'la', 'lo'])
+          && entry.u == request.time
+          && hasValidPrices(entry, entry.keys().toSet(), 'r', 'p', 'd', 'pp')
+          && hasValidPlace(entry, 'n', 'b', 'la', 'lo');
+    }
+
+    // A report changes one station: the one it names in lastReportedStation.
+    // Rules can't find a changed key on their own, so without that field they
+    // couldn't check the entry at all.
+    function isValidDirectoryReport() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let id = after.lastReportedStation;
+      return after.diff(before).affectedKeys()
+                 .hasOnly(['stations', 'lastReportedStation'])
+          && id is string
+          && after.stations.diff(before.stations).affectedKeys() == [id].toSet()
+          && id in after.stations
+          && (id in before.stations
+                ? isValidKnownEntry(before.stations[id], after.stations[id])
+                : isValidNewEntry(id, after.stations[id]));
+    }
+
     // Profile, points and saved stations belong to the owner.
     match /users/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
@@ -33,16 +121,24 @@ service cloud.firestore {
     }
 
     // Every station in one document, for a single-read map. Imported by
-    // tool/stations (admin); reports merge their prices into it.
+    // tool/stations (admin); reports merge their prices into it. Public: the
+    // website's landing page is the map, for visitors with no account.
     match /directory/{docId} {
-      allow read, update: if isSignedIn();
+      allow get: if true;
+      allow list: if false;
+      allow update: if isSignedIn() && isValidDirectoryReport();
       allow create, delete: if false;
     }
 
-    // Crowdsourced prices: anyone signed in can read and contribute.
+    // Crowdsourced prices: anyone can open one station (its details on the
+    // public map); anyone signed in can search them and report prices, but not
+    // rename or move a station. Holds no user data: who reported what stays in
+    // /reports.
     match /stations/{stationId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow get: if true;
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidStationCreate();
+      allow update: if isSignedIn() && isValidStationUpdate();
       allow delete: if false;
     }
 

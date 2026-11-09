@@ -107,6 +107,7 @@ void main() {
       lastUpdated: 'ts',
     );
     expect(update, {
+      'lastReportedStation': 'shell1',
       'stations': {
         'shell1': {
           'r': 62.0,

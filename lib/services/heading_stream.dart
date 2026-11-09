@@ -9,12 +9,11 @@ import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 /// `NO_SENSOR` as an error the moment anything listens, so there the dot
 /// simply has no heading cone. Real devices get the live compass.
 Stream<LocationMarkerHeading?> headingStreamForDevice() {
-  if (_isIosSimulator) return Stream.value(null);
+  // Browsers don't expose the sensor plugin's compass.
+  if (kIsWeb || _isIosSimulator) return Stream.value(null);
   return const LocationMarkerDataStreamFactory()
       .fromRotationSensorHeadingStream();
 }
 
 bool get _isIosSimulator =>
-    !kIsWeb &&
-    Platform.isIOS &&
-    Platform.environment.containsKey('SIMULATOR_DEVICE_NAME');
+    Platform.isIOS && Platform.environment.containsKey('SIMULATOR_DEVICE_NAME');

@@ -25,7 +25,7 @@ typedef StationDetailsLoader = Future<StationModel?> Function(String id);
 Future<void> showStationDetailSheet(
   BuildContext context, {
   required StationModel station,
-  required VoidCallback onReport,
+  VoidCallback? onReport,
   double? userLat,
   double? userLng,
   StationDetailsLoader? loadDetails,
@@ -40,10 +40,12 @@ Future<void> showStationDetailSheet(
       userLng: userLng,
       loadDetails: loadDetails,
       now: now ?? DateTime.now(),
-      onReport: () {
-        Navigator.pop(sheetContext);
-        onReport();
-      },
+      onReport: onReport == null
+          ? null
+          : () {
+              Navigator.pop(sheetContext);
+              onReport();
+            },
     ),
   );
 }
@@ -53,14 +55,16 @@ class StationDetailSheet extends StatefulWidget {
   final double? userLat;
   final double? userLng;
   final StationDetailsLoader? loadDetails;
-  final VoidCallback onReport;
+
+  /// Null where the map is read-only (the web): no way to report is offered.
+  final VoidCallback? onReport;
   final DateTime now;
 
   const StationDetailSheet({
     super.key,
     required this.station,
-    required this.onReport,
     required this.now,
+    this.onReport,
     this.userLat,
     this.userLng,
     this.loadDetails,
@@ -361,7 +365,7 @@ class _PriceCard extends StatelessWidget {
 
 /// Nobody has reported this station's prices yet.
 class _NoPricesYet extends StatelessWidget {
-  final VoidCallback onReport;
+  final VoidCallback? onReport;
 
   const _NoPricesYet({required this.onReport});
 
@@ -380,25 +384,27 @@ class _NoPricesYet extends StatelessWidget {
             'No prices reported yet',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Be the first: snap the price board and everyone nearby sees '
-            'what this station charges.',
-            style: TextStyle(fontSize: 13, height: 1.4),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 44,
-            child: FilledButton.icon(
-              onPressed: onReport,
-              icon: const Icon(Icons.photo_camera_outlined, size: 18),
-              label: const Text('Report prices'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.ink,
-                foregroundColor: Colors.white,
+          if (onReport != null) ...[
+            const SizedBox(height: 4),
+            const Text(
+              'Be the first: snap the price board and everyone nearby sees '
+              'what this station charges.',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 44,
+              child: FilledButton.icon(
+                onPressed: onReport,
+                icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                label: const Text('Report prices'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.ink,
+                  foregroundColor: Colors.white,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -408,7 +414,7 @@ class _NoPricesYet extends StatelessWidget {
 /// Shown when the last report predates this week's Tuesday price change.
 class _UpdateNudge extends StatelessWidget {
   final DateTime reportedAt;
-  final VoidCallback onReport;
+  final VoidCallback? onReport;
 
   const _UpdateNudge({required this.reportedAt, required this.onReport});
 
@@ -445,23 +451,26 @@ class _UpdateNudge extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Pump prices change every Tuesday. These were reported '
-              '${formatDate(reportedAt)}. At this station? Snap the price '
-              'board so everyone sees this week\'s prices.',
+              '${formatDate(reportedAt)}.'
+              '${onReport == null ? '' : ' At this station? Snap the price '
+                        'board so everyone sees this week\'s prices.'}',
               style: const TextStyle(fontSize: 13, height: 1.4),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 44,
-              child: FilledButton.icon(
-                onPressed: onReport,
-                icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                label: const Text('Report new prices'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.ink,
-                  foregroundColor: Colors.white,
+            if (onReport != null) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 44,
+                child: FilledButton.icon(
+                  onPressed: onReport,
+                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                  label: const Text('Report new prices'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.ink,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),

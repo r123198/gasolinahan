@@ -18,6 +18,18 @@ void main() {
     });
   });
 
+  group('flavorForBuild', () {
+    test('the web has only one Firebase app, so it is always prod', () {
+      expect(flavorForBuild('dev', isWeb: true), Flavor.prod);
+      expect(flavorForBuild(null, isWeb: true), Flavor.prod);
+    });
+
+    test('the phone apps follow --flavor', () {
+      expect(flavorForBuild('dev', isWeb: false), Flavor.dev);
+      expect(flavorForBuild('prod', isWeb: false), Flavor.prod);
+    });
+  });
+
   test('prod uses the production Firebase project', () {
     expect(
       firebaseOptionsFor(Flavor.prod).projectId,

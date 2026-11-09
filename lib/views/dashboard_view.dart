@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
@@ -8,7 +9,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart' show Style;
+import '../models/app_access.dart';
 import '../models/station_model.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
 import '../viewmodels/fill_up_nudge_viewmodel.dart';
 import '../viewmodels/fill_up_viewmodel.dart';
@@ -18,8 +21,11 @@ import '../ui/adaptive/app_platform.dart';
 import '../ui/adaptive/app_toast.dart';
 import '../ui/app_theme.dart';
 import '../ui/map_style.dart';
+import '../ui/web_layout.dart';
+import '../components/guest_map_bar.dart';
 import '../components/map_bottom_controls.dart';
 import '../components/station_marker.dart';
+import '../services/app_links.dart';
 import '../services/current_location.dart';
 import '../services/geo.dart';
 import '../services/heading_stream.dart';
@@ -56,15 +62,30 @@ const _followZoom = 16.0;
 const _closeZoom = 17.0;
 const _locationTimeout = Duration(seconds: 8);
 
+/// A mouse wheel is how a desktop browser zooms a map; on the phones a
+/// wheel never comes up, so their gestures are unchanged.
+const _mapGestures =
+    InteractiveFlag.pinchZoom |
+    InteractiveFlag.drag |
+    InteractiveFlag.flingAnimation |
+    InteractiveFlag.doubleTapZoom |
+    (kIsWeb ? InteractiveFlag.scrollWheelZoom : InteractiveFlag.none);
+
 class DashboardView extends StatefulWidget {
-  const DashboardView({super.key});
+  /// What signing in was for, when that's what brought the user here.
+  final SignInGoal? goal;
+
+  const DashboardView({super.key, this.goal});
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
 }
 
 class _DashboardViewState extends State<DashboardView> {
-  int _selectedIndex = 0;
+  late int _selectedIndex = initialDashboardTab(
+    isWeb: kIsWeb,
+    goal: widget.goal,
+  );
 
   /// Tells the location layer to re-center (value = zoom) on demand.
   final StreamController<double?> _alignToUser = StreamController.broadcast();
@@ -109,14 +130,20 @@ class _DashboardViewState extends State<DashboardView> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<DashboardViewModel>().listenToStations();
       // Signed in by now: pull this account's fill-ups from the cloud.
-      _fillUpsVm.load();
+      if (!_isGuest) _fillUpsVm.load();
       // Explain background tracking before any location prompt appears.
-      await _askAboutAutoTracking();
+      // Browsers can't track in the background, so they never ask.
+      if (!kIsWeb) await _askAboutAutoTracking();
       if (!mounted) return;
       _startTripsAndNudges();
       _initLocation();
     });
   }
+
+  bool get _isGuest => isGuestVisitor(
+    isWeb: kIsWeb,
+    isSignedIn: context.read<AuthViewModel>().isAuthenticated,
+  );
 
   // Kept so the listeners can be removed in dispose without using context.
   late final DashboardViewModel _stationsVm;
@@ -152,6 +179,7 @@ class _DashboardViewState extends State<DashboardView> {
     _nudgesVm.addListener(_openNudgedFillUp);
     _syncNudgeStations();
     _syncNudgeFillUps();
+    if (kIsWeb) return; // nudges need trips, which browsers don't record
     await _nudgesVm.start(trips.locationUpdates);
     _openNudgedFillUp(); // the app may have been opened from a nudge
   }
@@ -241,6 +269,11 @@ class _DashboardViewState extends State<DashboardView> {
 
   /// Turns on location and asks for permission if needed. True when allowed.
   Future<bool> _ensureLocationAllowed() async {
+    if (kIsWeb) {
+      final allowed = await askBrowserForLocation();
+      if (allowed) _onLocationAllowed();
+      return allowed;
+    }
     try {
       var serviceEnabled = await _location.serviceEnabled();
       if (!serviceEnabled) serviceEnabled = await _location.requestService();
@@ -262,6 +295,9 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   Future<void> _lookUpInitialLocation() async {
+    // A prompt on a page someone just opened gets refused, and browsers
+    // remember that; ask when they tap my-location instead.
+    if (kIsWeb && !await isLocationAllowedInBrowser()) return;
     if (!await _ensureLocationAllowed()) return;
     // A recent cached fix centres the map at once; a fresh one refines it.
     final cached = await readLastKnownLocation();
@@ -309,7 +345,22 @@ class _DashboardViewState extends State<DashboardView> {
     _mapController.move(LatLng(fix.latitude, fix.longitude), zoom);
   }
 
+  /// Sends a guest to sign in, carrying on with [goal] afterwards.
+  void _askGuestToSignIn([SignInGoal? goal]) {
+    Navigator.pushNamed(context, '/login', arguments: goal);
+  }
+
+  /// How the map offers reporting. Null on the web, whose map is read-only:
+  /// prices are only reported from the phone apps.
+  VoidCallback? get _reportAction =>
+      kIsWeb ? null : () => Navigator.pushNamed(context, '/report');
+
   void _onItemTapped(int index) {
+    final goal = signInGoalForTab(index);
+    if (_isGuest && goal != null) {
+      _askGuestToSignIn(goal);
+      return;
+    }
     setState(() {
       _selectedIndex = index;
     });
@@ -325,7 +376,7 @@ class _DashboardViewState extends State<DashboardView> {
       station: station,
       userLat: _userLat,
       userLng: _userLng,
-      onReport: () => Navigator.pushNamed(context, '/report'),
+      onReport: _reportAction,
       loadDetails: _stationsVm.loadDetails,
     );
   }
@@ -367,6 +418,12 @@ class _DashboardViewState extends State<DashboardView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final isGuest = isGuestVisitor(
+      isWeb: kIsWeb,
+      isSignedIn: context.select<AuthViewModel, bool>(
+        (auth) => auth.isAuthenticated,
+      ),
+    );
     return Scaffold(
       extendBody: true,
       resizeToAvoidBottomInset: false,
@@ -379,53 +436,97 @@ class _DashboardViewState extends State<DashboardView> {
         // positioned layers, shrinks to its only sized child.
         sizing: StackFit.expand,
         children: [
-          const SafeArea(bottom: false, child: HomeView()),
-          _buildMapTab(scheme),
-          const SafeArea(bottom: false, child: ProfileView()),
+          if (isGuest)
+            const SizedBox.shrink()
+          else
+            const WebWidthLimit(
+              maxWidth: webTabMaxWidth,
+              child: SafeArea(bottom: false, child: HomeView()),
+            ),
+          _buildMapTab(scheme, isGuest: isGuest),
+          if (isGuest)
+            const SizedBox.shrink()
+          else
+            const WebWidthLimit(
+              maxWidth: webTabMaxWidth,
+              child: SafeArea(bottom: false, child: ProfileView()),
+            ),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: isCupertino(context)
-              ? _buildCupertinoTabBar(scheme)
-              : NavigationBar(
-                  selectedIndex: _selectedIndex,
-                  backgroundColor: Colors.white.withValues(alpha: 0.97),
-                  indicatorColor: AppColors.surfaceMuted,
-                  onDestinationSelected: _onItemTapped,
-                  destinations: [
-                    for (final tab in _tabs)
-                      NavigationDestination(
-                        icon: Icon(tab.icon),
-                        selectedIcon: Icon(tab.selectedIcon),
-                        label: tab.label,
-                      ),
-                  ],
-                ),
+      bottomNavigationBar: WebWidthLimit(
+        maxWidth: webNavMaxWidth,
+        alignment: Alignment.bottomCenter,
+        heightFactor: 1,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: isCupertino(context)
+                ? _buildCupertinoTabBar(scheme)
+                : NavigationBar(
+                    selectedIndex: _selectedIndex,
+                    backgroundColor: Colors.white.withValues(alpha: 0.97),
+                    indicatorColor: AppColors.surfaceMuted,
+                    onDestinationSelected: _onItemTapped,
+                    destinations: [
+                      for (final tab in _tabs)
+                        NavigationDestination(
+                          icon: Icon(tab.icon),
+                          selectedIcon: Icon(tab.selectedIcon),
+                          label: tab.label,
+                        ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMapTab(ColorScheme scheme) {
+  Widget _buildMapTab(ColorScheme scheme, {required bool isGuest}) {
     return Stack(
       children: [
         Positioned.fill(child: _buildMap()),
         Positioned(
+          left: 16,
+          right: 16,
+          top: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isGuest)
+                    GuestMapBar(
+                      onAbout: () => openLink(aboutUrl),
+                      onSignIn: _askGuestToSignIn,
+                    ),
+                  const _MapLoadError(),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
           left: 0,
           right: 0,
           bottom: 0,
-          child: Consumer<DashboardViewModel>(
-            builder: (context, vm, _) => MapBottomControls(
-              stationCount: vm.visibleStations.length,
-              onShowStations: _openNearbyStations,
-              onSearch: _openSearch,
-              onReport: () => Navigator.pushNamed(context, '/report'),
-              onMyLocation: _goToMyLocation,
-              onTrackingStarted: _startFollowingUser,
-              onTrackingStopped: _stopFollowingUser,
+          child: WebWidthLimit(
+            maxWidth: webMapControlsMaxWidth,
+            alignment: Alignment.bottomRight,
+            child: Consumer<DashboardViewModel>(
+              builder: (context, vm, _) => MapBottomControls(
+                stationCount: vm.visibleStations.length,
+                onShowStations: _openNearbyStations,
+                onSearch: _openSearch,
+                onReport: _reportAction,
+                onMyLocation: _goToMyLocation,
+                onTrackingStarted: _startFollowingUser,
+                onTrackingStopped: _stopFollowingUser,
+              ),
             ),
           ),
         ),
@@ -538,13 +639,7 @@ class _DashboardViewState extends State<DashboardView> {
                 setState(() => _followUser = false);
               }
             },
-            interactionOptions: const InteractionOptions(
-              flags:
-                  InteractiveFlag.pinchZoom |
-                  InteractiveFlag.drag |
-                  InteractiveFlag.flingAnimation |
-                  InteractiveFlag.doubleTapZoom,
-            ),
+            interactionOptions: const InteractionOptions(flags: _mapGestures),
           ),
           children: [
             // See map_style.dart: OpenFreeMap Positron, or plain OSM tiles
@@ -611,6 +706,50 @@ class _DashboardViewState extends State<DashboardView> {
             label: tab.label,
           ),
       ],
+    );
+  }
+}
+
+/// Says so when the stations can't load, instead of an empty map that looks
+/// like there's no data. The web's landing page depends on this read.
+class _MapLoadError extends StatelessWidget {
+  const _MapLoadError();
+
+  @override
+  Widget build(BuildContext context) {
+    final message = context.select<DashboardViewModel, String?>(
+      (vm) => vm.errorMessage,
+    );
+    if (message == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Semantics(
+        liveRegion: true,
+        child: Material(
+          color: Colors.white,
+          elevation: 2,
+          borderRadius: BorderRadius.circular(16),
+          child: Row(
+            children: [
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: context.read<DashboardViewModel>().listenToStations,
+                child: const Text('Try again'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

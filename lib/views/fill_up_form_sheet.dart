@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/app_primary_button.dart';
@@ -678,7 +679,10 @@ class _FillUpFormState extends State<_FillUpForm> {
                   ? null
                   : 'Last fill-up: ${formatKm(lastOdometer)}',
               action: TextInputAction.done,
-              suffixIcon: _isScanning
+              // Odometer reading uses on-device OCR, which browsers don't have.
+              suffixIcon: kIsWeb
+                  ? null
+                  : _isScanning
                   ? const Padding(
                       padding: EdgeInsets.all(14),
                       child: AppSpinner(size: 20, strokeWidth: 2),

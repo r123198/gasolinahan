@@ -106,4 +106,29 @@ void main() {
     expect(trips.isTracking, isFalse);
     expect(stopped, 1);
   });
+
+  testWidgets('without onReport (the web) there is no report button', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: MapBottomControls(
+              stationCount: 12,
+              onShowStations: () {},
+              onSearch: () {},
+              onMyLocation: () {},
+              onTrackingStarted: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Report a price'), findsNothing);
+    expect(find.byTooltip('Search stations'), findsOneWidget);
+    expect(find.byTooltip('Go to my location'), findsOneWidget);
+  });
 }

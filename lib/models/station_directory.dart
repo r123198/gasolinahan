@@ -12,6 +12,7 @@ import 'station_model.dart';
 /// directory/stations
 ///   count: 316
 ///   updatedAt: <timestamp>
+///   lastReportedStation: <stationId>   the entry the latest report changed
 ///   stations:
 ///     <stationId>:
 ///       n: name            b: brand ("" for independents)
@@ -26,7 +27,9 @@ import 'station_model.dart';
 ///       ns: nearby convenience store name
 /// ```
 /// Price reports merge `stations.<id>.{r,p,d,pp,u}` into this document
-/// (see `ReportWriter`), so prices stay current without re-importing.
+/// (see `ReportWriter`), so prices stay current without re-importing. The
+/// report also names its station in `lastReportedStation`, as Firestore rules
+/// can only check an entry whose id they are given.
 /// The import script in `tool/stations/` writes the same shape.
 const directoryCollection = 'directory';
 const directoryDocId = 'stations';
@@ -125,6 +128,7 @@ Map<String, dynamic> directoryPriceUpdate({
   double longitude = 0,
   required Object lastUpdated,
 }) => {
+  'lastReportedStation': stationId,
   'stations': {
     stationId: {
       if (regularPrice > 0) 'r': regularPrice,

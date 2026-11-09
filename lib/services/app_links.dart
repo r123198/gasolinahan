@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// Public pages on the Gasolinahan website (Firebase Hosting).
 const _site = 'https://gasolinahan-e0917.web.app';
 
+final aboutUrl = Uri.parse('$_site/about');
 final privacyPolicyUrl = Uri.parse('$_site/privacy');
 final termsUrl = Uri.parse('$_site/terms');
 final deleteAccountUrl = Uri.parse('$_site/delete-account');

@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/app_logo.dart';
+import '../models/app_access.dart';
 import '../services/onboarding_prefs.dart';
 import '../viewmodels/auth_viewmodel.dart';
 
@@ -27,13 +29,18 @@ class _SplashViewState extends State<SplashView> {
     final results = await Future.wait<Object?>([
       OnboardingPrefs().checkAndRecordLaunch(DateTime.now()),
       authViewModel.checkAuthState(),
-      Future<void>.delayed(_minSplashTime),
+      // The phones hand off from a launch screen; the web's landing page is
+      // the map, so nobody should wait extra for it.
+      if (!kIsWeb) Future<void>.delayed(_minSplashTime),
     ]);
     final showWelcome = results.first as bool;
 
     if (!mounted) return;
-    final next = authViewModel.isAuthenticated ? '/dashboard' : '/login';
-    if (showWelcome) {
+    final next = startRouteFor(
+      isWeb: kIsWeb,
+      isSignedIn: authViewModel.isAuthenticated,
+    );
+    if (showsWelcomeTour(isWeb: kIsWeb, isDue: showWelcome)) {
       Navigator.pushReplacementNamed(context, '/welcome', arguments: next);
     } else {
       Navigator.pushReplacementNamed(context, next);

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../components/app_primary_button.dart';
@@ -8,6 +6,7 @@ import '../components/fill_up_log_card.dart'
     show FillUpAction, showFillUpPhotos;
 import '../components/fuel_pill.dart';
 import '../models/fill_up_log.dart';
+import '../ui/device_photo.dart';
 import '../ui/adaptive/app_icon_button.dart';
 import '../ui/adaptive/app_sheet.dart';
 import '../ui/adaptive/app_tappable.dart';
@@ -450,12 +449,12 @@ class _Photos extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: Image.file(
-                    File(paths[i]),
+                  child: devicePhoto(
+                    paths[i],
                     width: _thumbSize,
                     height: _thumbSize,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Container(
+                    placeholder: (_) => Container(
                       width: _thumbSize,
                       height: _thumbSize,
                       color: AppColors.surfaceMuted,

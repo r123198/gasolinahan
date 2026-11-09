@@ -34,6 +34,7 @@ class FillUpPhotoStore {
 
   /// Deletes stored photos; missing files are ignored.
   Future<void> discard(Iterable<String> paths) async {
+    if (kIsWeb) return; // browsers hold no photo files
     for (final path in paths) {
       try {
         final file = File(path);

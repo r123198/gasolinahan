@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 import '../models/user_model.dart';
 import '../services/firebase_service.dart';
 import '../services/local_account_data.dart';
@@ -48,6 +48,7 @@ class AuthViewModel extends ChangeNotifier {
   /// out so the splash screen can always move on.
   Future<void> checkAuthState() async {
     try {
+      await _firebaseService.restoreSession();
       final user = await _firebaseService.getCurrentUser();
       if (user != null) {
         _currentUser = user;
@@ -106,14 +107,13 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> updateProfileImage(String imagePath) async {
+  Future<void> updateProfileImage(XFile photo) async {
     if (_currentUser == null) return;
     _setLoading(true);
     try {
-      final file = File(imagePath);
       final url = await _firebaseService.uploadProfileImage(
         _currentUser!.id,
-        file,
+        await photo.readAsBytes(),
       );
       _currentUser = _currentUser!.copyWith(profileImageUrl: url);
       notifyListeners();

@@ -9,6 +9,7 @@ import '../components/app_text_field.dart';
 import '../ui/app_theme.dart';
 import '../ui/form_validators.dart';
 import 'auth_header.dart';
+import 'sign_in_flow.dart';
 
 class SignUpView extends StatefulWidget {
   const SignUpView({super.key});
@@ -57,7 +58,7 @@ class _SignUpViewState extends State<SignUpView> {
     if (!mounted) return;
     if (success) {
       TextInput.finishAutofillContext();
-      Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (_) => false);
+      continueAfterSignIn(context, signInGoalOf(context));
       return;
     }
     setState(() => _formError = auth.errorMessage ?? 'Sign up failed.');

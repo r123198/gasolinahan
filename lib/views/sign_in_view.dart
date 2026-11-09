@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,7 @@ import '../ui/adaptive/app_toast.dart';
 import '../ui/app_theme.dart';
 import '../ui/form_validators.dart';
 import 'auth_header.dart';
+import 'sign_in_flow.dart';
 
 class SignInView extends StatefulWidget {
   const SignInView({super.key});
@@ -56,7 +58,7 @@ class _SignInViewState extends State<SignInView> {
     if (!mounted) return;
     if (success) {
       TextInput.finishAutofillContext();
-      Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (_) => false);
+      continueAfterSignIn(context, signInGoalOf(context));
       return;
     }
     setState(() => _formError = auth.errorMessage ?? 'Sign in failed.');
@@ -152,8 +154,31 @@ class _SignInViewState extends State<SignInView> {
                 AuthSwitchPrompt(
                   prompt: "Don't have an account?",
                   action: 'Create one',
-                  onPressed: () => Navigator.pushNamed(context, '/register'),
+                  onPressed: () => Navigator.pushNamed(
+                    context,
+                    '/register',
+                    arguments: signInGoalOf(context),
+                  ),
                 ),
+                if (kIsWeb)
+                  Center(
+                    child: AppTextButton(
+                      onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/dashboard',
+                        (_) => false,
+                      ),
+                      foregroundColor: AppColors.textMuted,
+                      child: const Text(
+                        'Back to the map',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontFamily,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

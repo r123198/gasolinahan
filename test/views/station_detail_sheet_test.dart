@@ -113,4 +113,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Tuesday'), findsOneWidget);
   });
+
+  group('read-only map (the web)', () {
+    Future<void> openReadOnly(WidgetTester tester, StationModel s) async {
+      tester.view.physicalSize = const Size(360 * 3, 800 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StationDetailSheet(
+              station: s,
+              now: DateTime(2026, 11, 2), // a Monday
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('a station with no prices offers no way to add them', (
+      tester,
+    ) async {
+      await openReadOnly(
+        tester,
+        StationModel(
+          id: 's2',
+          name: 'New Station',
+          brand: 'Petron',
+          address: 'Calamba',
+          latitude: 14.2,
+          longitude: 121.1,
+          regularPrice: 0,
+          premiumPrice: 0,
+          dieselPrice: 0,
+          lastUpdated: DateTime(2026, 10, 1),
+        ),
+      );
+
+      expect(find.text('No prices reported yet'), findsOneWidget);
+      expect(find.text('Report prices'), findsNothing);
+      expect(find.textContaining('snap the price board'), findsNothing);
+    });
+
+    testWidgets('old prices still warn, but offer no way to update them', (
+      tester,
+    ) async {
+      await openReadOnly(tester, station(DateTime(2026, 10, 1)));
+
+      expect(find.text('Prices may have changed'), findsOneWidget);
+      expect(find.text('Report new prices'), findsNothing);
+      expect(find.textContaining('Snap the price'), findsNothing);
+    });
+  });
 }
